@@ -77,7 +77,7 @@ OBJS_CRYPTO=	aes.o		aesni.o		arc4.o		\
 		chachapoly.o	cipher.o	cipher_wrap.o	\
 		cmac.o		ctr_drbg.o	des.o		\
 		dhm.o		ecdh.o		ecdsa.o		\
-		ecjpake.o	ecp.o				\
+		ecjpake.o	ecp.o		ecp_atca.o		\
 		ecp_curves.o	entropy.o	entropy_poll.o	\
 		error.o		gcm.o		havege.o	\
 		hkdf.o						\

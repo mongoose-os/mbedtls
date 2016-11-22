@@ -44,6 +44,9 @@
 
 #if defined(MBEDTLS_ECP_C)
 #include "mbedtls/ecp.h"
+#if defined(MBEDTLS_ECP_ATCA)
+#include "mbedtls/ecp_atca.h"
+#endif
 #endif
 
 #if defined(MBEDTLS_HAVE_TIME)
@@ -256,6 +259,13 @@ static int ssl_parse_signature_algorithms_ext( mbedtls_ssl_context *ssl,
                                         " unknown hash alg encoding %d", p[0] ) );
             continue;
         }
+
+#if defined(MBEDTLS_ECP_ATCA)
+        /*
+         * When using crypto chip, limit ourselves to SHA256.
+         */
+        if (mbedtls_atca_is_available() && md_cur != MBEDTLS_MD_SHA256) continue;
+#endif
 
         if( mbedtls_ssl_check_sig_hash( ssl, md_cur ) == 0 )
         {
@@ -675,7 +685,7 @@ static int ssl_parse_alpn_ext( mbedtls_ssl_context *ssl,
 /*
  * Return 0 if the given key uses one of the acceptable curves, -1 otherwise
  */
-#if defined(MBEDTLS_ECDSA_C)
+#if defined(MBEDTLS_ECDSA_C) && !defined(MBEDTLS_ECP_ATCA)
 static int ssl_check_key_curve( mbedtls_pk_context *pk,
                                 const mbedtls_ecp_curve_info **curves )
 {
@@ -750,7 +760,8 @@ static int ssl_pick_cert( mbedtls_ssl_context *ssl,
             continue;
         }
 
-#if defined(MBEDTLS_ECDSA_C)
+// XXX: temporarily disabled because ATCA context is not a real ECDSA context.
+#if defined(MBEDTLS_ECDSA_C) && !defined(MBEDTLS_ECP_ATCA)
         if( pk_alg == MBEDTLS_PK_ECDSA &&
             ssl_check_key_curve( &cur->cert->pk, ssl->handshake->curves ) != 0 )
         {
@@ -813,8 +824,8 @@ static int ssl_ciphersuite_match( mbedtls_ssl_context *ssl, int suite_id,
     suite_info = mbedtls_ssl_ciphersuite_from_id( suite_id );
     if( suite_info == NULL )
     {
-        MBEDTLS_SSL_DEBUG_MSG( 1, ( "should never happen" ) );
-        return( MBEDTLS_ERR_SSL_INTERNAL_ERROR );
+        MBEDTLS_SSL_DEBUG_MSG( 3, ( "unknown ciphersuite: %02x", suite_id) );
+        return( 0 );
     }
 
     MBEDTLS_SSL_DEBUG_MSG( 3, ( "trying ciphersuite: %s", suite_info->name ) );
@@ -2950,9 +2961,9 @@ static int ssl_get_ecdh_params_from_cert( mbedtls_ssl_context *ssl )
         return( MBEDTLS_ERR_SSL_PK_TYPE_MISMATCH );
     }
 
-    if( ( ret = mbedtls_ecdh_get_params( &ssl->handshake->ecdh_ctx,
-                                 mbedtls_pk_ec( *mbedtls_ssl_own_key( ssl ) ),
-                                 MBEDTLS_ECDH_OURS ) ) != 0 )
+    if( ( ret = mbedtls_ecdh_get_params_pk( &ssl->handshake->ecdh_ctx,
+                                 mbedtls_ssl_own_key( ssl ),
+                                 MBEDTLS_ECDH_OURS ) ) != -1 )
     {
         MBEDTLS_SSL_DEBUG_RET( 1, ( "mbedtls_ecdh_get_params" ), ret );
         return( ret );

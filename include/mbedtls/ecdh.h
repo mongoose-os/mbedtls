@@ -41,6 +41,7 @@
 #endif
 
 #include "ecp.h"
+#include "pk.h"
 
 /*
  * Use a backward compatible ECDH context.
@@ -123,6 +124,9 @@ typedef struct mbedtls_ecdh_context
     int restart_enabled;        /*!< The flag for restartable mode. */
     mbedtls_ecp_restart_ctx rs; /*!< The restart context for EC computations. */
 #endif /* MBEDTLS_ECP_RESTARTABLE */
+#if defined(MBEDTLS_ECP_ATCA)
+    uint8_t atca_slot;
+#endif
 #else
     uint8_t point_format;       /*!< The format of point export in TLS messages
                                   as defined in RFC 4492. */
@@ -328,6 +332,10 @@ int mbedtls_ecdh_read_params( mbedtls_ecdh_context *ctx,
 int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx,
                              const mbedtls_ecp_keypair *key,
                              mbedtls_ecdh_side side );
+
+int mbedtls_ecdh_get_params_pk( mbedtls_ecdh_context *ctx,
+                                const mbedtls_pk_context *pk,
+                                mbedtls_ecdh_side side );
 
 /**
  * \brief           This function generates a public key and exports it
