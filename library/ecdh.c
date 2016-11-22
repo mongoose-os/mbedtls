@@ -60,6 +60,8 @@
 #if defined(MBEDTLS_ECDH_C)
 
 #include "mbedtls/ecdh.h"
+#include "mbedtls/ecp_atca.h"
+#include "mbedtls/pk_internal.h"
 #include "mbedtls/platform_util.h"
 
 #include <string.h>
@@ -113,6 +115,27 @@ cleanup:
     return( ret );
 }
 
+static int ecdh_gen_public_restartable_atca( mbedtls_ecdh_context *ctx,
+                    int (*f_rng)(void *, unsigned char *, size_t),
+                    void *p_rng,
+                    mbedtls_ecp_restart_ctx *rs_ctx )
+{
+
+#ifdef MBEDTLS_ECP_ATCA
+    uint8_t slot;
+    if( ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 &&
+        ecp_atca_ecdh_gen_keypair( &ctx->Q, &slot, f_rng, p_rng ) == 0)
+    {
+        ctx->atca_slot = slot;
+        return( 0 );
+    }
+    /* HW unavailable, fall through to sw impl. */
+    fprintf(stderr, "SW ECDH curve %d\n", ctx->grp.id);
+#endif
+
+    return( ecdh_gen_public_restartable(&ctx->grp, &ctx->d, &ctx->Q, f_rng, p_rng, rs_ctx) );
+}
+
 /*
  * Generate public key
  */
@@ -126,7 +149,7 @@ int mbedtls_ecdh_gen_public( mbedtls_ecp_group *grp, mbedtls_mpi *d, mbedtls_ecp
     ECDH_VALIDATE_RET( f_rng != NULL );
     return( ecdh_gen_public_restartable( grp, d, Q, f_rng, p_rng, NULL ) );
 }
-#endif /* !MBEDTLS_ECDH_GEN_PUBLIC_ALT */
+#endif /* MBEDTLS_ECDH_GEN_PUBLIC_ALT */
 
 #if !defined(MBEDTLS_ECDH_COMPUTE_SHARED_ALT)
 /*
@@ -161,6 +184,30 @@ cleanup:
     return( ret );
 }
 
+static int ecdh_compute_shared_restartable_atca( mbedtls_ecdh_context *ctx,
+                         int (*f_rng)(void *, unsigned char *, size_t),
+                         void *p_rng,
+                         mbedtls_ecp_restart_ctx *rs_ctx )
+{
+
+#if defined(MBEDTLS_ECP_ATCA)
+    if ( ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 &&
+         ctx->atca_slot != MBEDTLS_ECP_ATCA_SLOT_INVALID )
+    {
+        int ret = ecp_atca_ecdh_compute_pms( ctx->atca_slot, &ctx->Qp, &ctx->z );
+        if ( ctx->atca_slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY )
+        {
+            ecp_atca_release_tempkey();
+        }
+        ctx->atca_slot = MBEDTLS_ECP_ATCA_SLOT_INVALID;
+        return( ret );
+    }
+#endif
+
+    return( ecdh_compute_shared_restartable( &ctx->grp, &ctx->z, &ctx->Qp,
+                                             &ctx->d, f_rng, p_rng, rs_ctx ) );
+}
+
 /*
  * Compute shared secret (SEC1 3.3.1)
  */
@@ -188,6 +235,9 @@ static void ecdh_init_internal( mbedtls_ecdh_context_mbed *ctx )
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
     mbedtls_ecp_restart_init( &ctx->rs );
+#endif
+#ifdef MBEDTLS_ECP_ATCA
+    ctx->atca_slot = MBEDTLS_ECP_ATCA_SLOT_INVALID;
 #endif
 }
 
@@ -261,6 +311,12 @@ static void ecdh_free_internal( mbedtls_ecdh_context_mbed *ctx )
 #if defined(MBEDTLS_ECP_RESTARTABLE)
     mbedtls_ecp_restart_free( &ctx->rs );
 #endif
+#ifdef MBEDTLS_ECP_ATCA
+    if ( ctx->atca_slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY )
+    {
+        ecp_atca_release_tempkey();
+    }
+#endif
 }
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
@@ -331,12 +387,10 @@ static int ecdh_make_params_internal( mbedtls_ecdh_context_mbed *ctx,
 
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
-    if( ( ret = ecdh_gen_public_restartable( &ctx->grp, &ctx->d, &ctx->Q,
-                                             f_rng, p_rng, rs_ctx ) ) != 0 )
+    if( ( ret = ecdh_gen_public_restartable_atca( ctx, f_rng, p_rng, rs_ctx ) ) != 0 )
         return( ret );
 #else
-    if( ( ret = mbedtls_ecdh_gen_public( &ctx->grp, &ctx->d, &ctx->Q,
-                                         f_rng, p_rng ) ) != 0 )
+    if( ( ret = ecdh_gen_public_restartable_atca( ctx, f_rng, p_rng, NULL ) ) != 0 )
         return( ret );
 #endif /* MBEDTLS_ECP_RESTARTABLE */
 
@@ -472,6 +526,7 @@ int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx,
                              mbedtls_ecdh_side side )
 {
     int ret;
+
     ECDH_VALIDATE_RET( ctx != NULL );
     ECDH_VALIDATE_RET( key != NULL );
     ECDH_VALIDATE_RET( side == MBEDTLS_ECDH_OURS ||
@@ -507,6 +562,33 @@ int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx,
 #endif
 }
 
+int mbedtls_ecdh_get_params_pk( mbedtls_ecdh_context *ctx,
+                                const mbedtls_pk_context *pk,
+                                mbedtls_ecdh_side side )
+{
+    int ret = 0;
+
+    ECDH_VALIDATE_RET( ctx != NULL );
+    ECDH_VALIDATE_RET( pk != NULL );
+    ECDH_VALIDATE_RET( side == MBEDTLS_ECDH_OURS ||
+                       side == MBEDTLS_ECDH_THEIRS );
+
+#ifdef MBEDTLS_ECP_ATCA
+    if ( side == MBEDTLS_ECDH_OURS &&
+         strcmp(pk->pk_info->name, MBEDTLS_ECP_ATCA_KEY_NAME) == 0 ) {
+        mbedtls_ecp_group_id grp_id = MBEDTLS_ECP_DP_SECP256R1;  // TODO
+        if ( ( ret = mbedtls_ecp_group_load(&ctx->grp, grp_id) ) != 0 )
+            return( ret );
+        ctx->atca_slot = 0;  // TODO
+        return 0;
+    }
+#else
+    (void) ret;
+#endif
+
+    return mbedtls_ecdh_get_params( ctx, mbedtls_pk_ec( *pk ), side );
+}
+
 static int ecdh_make_public_internal( mbedtls_ecdh_context_mbed *ctx,
                                       size_t *olen, int point_format,
                                       unsigned char *buf, size_t blen,
@@ -532,12 +614,10 @@ static int ecdh_make_public_internal( mbedtls_ecdh_context_mbed *ctx,
 #endif
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
-    if( ( ret = ecdh_gen_public_restartable( &ctx->grp, &ctx->d, &ctx->Q,
-                                             f_rng, p_rng, rs_ctx ) ) != 0 )
+    if( ( ret = ecdh_gen_public_restartable_atca( ctx, f_rng, p_rng, rs_ctx ) ) != 0 )
         return( ret );
 #else
-    if( ( ret = mbedtls_ecdh_gen_public( &ctx->grp, &ctx->d, &ctx->Q,
-                                         f_rng, p_rng ) ) != 0 )
+    if( ( ret = ecdh_gen_public_restartable_atca( ctx, f_rng, p_rng, NULL ) ) != 0 )
         return( ret );
 #endif /* MBEDTLS_ECP_RESTARTABLE */
 
@@ -644,19 +724,18 @@ static int ecdh_calc_secret_internal( mbedtls_ecdh_context_mbed *ctx,
 #endif
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
-    if( ( ret = ecdh_compute_shared_restartable( &ctx->grp, &ctx->z, &ctx->Qp,
-                                                 &ctx->d, f_rng, p_rng,
-                                                 rs_ctx ) ) != 0 )
+    if( ( ret = ecdh_compute_shared_restartable_atca( ctx, f_rng, p_rng, rs_ctx ) ) != 0 )
     {
         return( ret );
     }
 #else
-    if( ( ret = mbedtls_ecdh_compute_shared( &ctx->grp, &ctx->z, &ctx->Qp,
-                                             &ctx->d, f_rng, p_rng ) ) != 0 )
+    if( ( ret = ecdh_compute_shared_restartable_atca( ctx, f_rng, p_rng, NULL ) ) != 0 )
     {
         return( ret );
     }
 #endif /* MBEDTLS_ECP_RESTARTABLE */
+
+    if (ret != 0) return ret;
 
     if( mbedtls_mpi_size( &ctx->z ) > blen )
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );

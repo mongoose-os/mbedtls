@@ -53,10 +53,13 @@
 #if defined(MBEDTLS_PK_PARSE_C)
 
 #include "mbedtls/pk.h"
+#include "mbedtls/pk_internal.h"
+#include "mbedtls/ecp_atca.h"
 #include "mbedtls/asn1.h"
 #include "mbedtls/oid.h"
 #include "mbedtls/platform_util.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(MBEDTLS_RSA_C)
@@ -158,9 +161,25 @@ int mbedtls_pk_parse_keyfile( mbedtls_pk_context *ctx,
     int ret;
     size_t n;
     unsigned char *buf;
-
     PK_VALIDATE_RET( ctx != NULL );
     PK_VALIDATE_RET( path != NULL );
+
+#ifdef MBEDTLS_ECP_ATCA
+    if( path != NULL &&
+        strstr(path, MBEDTLS_ECP_ATCA_KEY_FILE_NAME_PREFIX) == path )
+    {
+        int slot = atoi(path + 5);
+        if( mbedtls_atca_get_ecdh_slots_mask() & (1 << slot) )
+        {
+            fprintf(stderr, "ATCA:%d cannot be used for private key, "
+                    "it is configured as ECDH slot.\n", slot);
+            return( MBEDTLS_ERR_PK_BAD_INPUT_DATA );
+        }
+        ret = mbedtls_pk_setup(ctx, &mbedtls_eckey_atca_info);
+        ctx->pk_ctx = (void *) (intptr_t) (slot + 1);
+        return( ret );
+    }
+#endif /* MBEDTLS_ECP_ATCA */
 
     if( ( ret = mbedtls_pk_load_file( path, &buf, &n ) ) != 0 )
         return( ret );
