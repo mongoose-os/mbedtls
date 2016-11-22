@@ -35,6 +35,8 @@
 #if defined(MBEDTLS_ECDH_C)
 
 #include "mbedtls/ecdh.h"
+#include "mbedtls/ecp_atca.h"
+#include "mbedtls/pk_internal.h"
 
 #include <string.h>
 
@@ -47,6 +49,25 @@ int mbedtls_ecdh_gen_public( mbedtls_ecp_group *grp, mbedtls_mpi *d, mbedtls_ecp
                      void *p_rng )
 {
     return mbedtls_ecp_gen_keypair( grp, d, Q, f_rng, p_rng );
+}
+
+static int mbedtls_ecdh_gen_public_2( mbedtls_ecdh_context *ctx,
+                     int (*f_rng)(void *, unsigned char *, size_t),
+                     void *p_rng )
+{
+#ifdef MBEDTLS_ECP_ATCA
+  int ret;
+  uint8_t slot;
+  if (ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 &&
+      (ret = ecp_atca_ecdh_gen_keypair(&ctx->Q, &slot, f_rng, p_rng)) == 0) {
+    ctx->use_atca = 1;
+    ctx->atca_slot = slot;
+    return 0;
+  }
+  /* HW unavailable, fall through to sw impl. */
+  fprintf(stderr, "SW ECDH curve %d\n", ctx->grp.id);
+#endif
+  return mbedtls_ecdh_gen_public(&ctx->grp, &ctx->d, &ctx->Q, f_rng, p_rng);
 }
 #endif /* MBEDTLS_ECDH_GEN_PUBLIC_ALT */
 
@@ -130,7 +151,7 @@ int mbedtls_ecdh_make_params( mbedtls_ecdh_context *ctx, size_t *olen,
     if( ctx == NULL || ctx->grp.pbits == 0 )
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );
 
-    if( ( ret = mbedtls_ecdh_gen_public( &ctx->grp, &ctx->d, &ctx->Q, f_rng, p_rng ) )
+    if( ( ret = mbedtls_ecdh_gen_public_2( ctx, f_rng, p_rng ) )
                 != 0 )
         return( ret );
 
@@ -174,10 +195,25 @@ int mbedtls_ecdh_read_params( mbedtls_ecdh_context *ctx,
 /*
  * Get parameters from a keypair
  */
-int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx, const mbedtls_ecp_keypair *key,
+int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx, mbedtls_pk_context *pk,
                      mbedtls_ecdh_side side )
 {
     int ret;
+    const mbedtls_ecp_keypair *key;
+
+#ifdef MBEDTLS_ECP_ATCA
+    if ( side == MBEDTLS_ECDH_OURS &&
+         strcmp(pk->pk_info->name, MBEDTLS_ECP_ATCA_KEY_NAME) == 0 ) {
+        mbedtls_ecp_group_id grp_id = MBEDTLS_ECP_DP_SECP256R1;  // TODO
+        if ( ( ret = mbedtls_ecp_group_load(&ctx->grp, grp_id) ) != 0 )
+            return( ret );
+        ctx->use_atca = 1;
+        ctx->atca_slot = 0;  // TODO
+        return 0;
+    }
+#endif
+
+    key = mbedtls_pk_ec( *pk );
 
     if( ( ret = mbedtls_ecp_group_copy( &ctx->grp, &key->grp ) ) != 0 )
         return( ret );
@@ -210,7 +246,7 @@ int mbedtls_ecdh_make_public( mbedtls_ecdh_context *ctx, size_t *olen,
     if( ctx == NULL || ctx->grp.pbits == 0 )
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );
 
-    if( ( ret = mbedtls_ecdh_gen_public( &ctx->grp, &ctx->d, &ctx->Q, f_rng, p_rng ) )
+    if( ( ret = mbedtls_ecdh_gen_public_2( ctx, f_rng, p_rng ) )
                 != 0 )
         return( ret );
 
@@ -252,11 +288,17 @@ int mbedtls_ecdh_calc_secret( mbedtls_ecdh_context *ctx, size_t *olen,
     if( ctx == NULL )
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );
 
-    if( ( ret = mbedtls_ecdh_compute_shared( &ctx->grp, &ctx->z, &ctx->Qp, &ctx->d,
-                                     f_rng, p_rng ) ) != 0 )
+#if defined(MBEDTLS_ECP_ATCA)
+    if (ctx->use_atca && ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1) {
+      ret = ecp_atca_ecdh_compute_pms(ctx->atca_slot, &ctx->Qp, &ctx->z);
+    } else
+#endif
     {
-        return( ret );
+      ret = mbedtls_ecdh_compute_shared( &ctx->grp, &ctx->z, &ctx->Qp, &ctx->d,
+                                     f_rng, p_rng );
     }
+
+    if (ret != 0) return ret;
 
     if( mbedtls_mpi_size( &ctx->z ) > blen )
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );

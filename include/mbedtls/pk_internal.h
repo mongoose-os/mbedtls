@@ -44,6 +44,10 @@ struct mbedtls_pk_info_t
     /** Get key size in bits */
     size_t (*get_bitlen)( const void * );
 
+#if defined(MBEDTLS_ECDSA_C)
+//    mbedtls_ecp_group_id (*get_ec_group_id)( const void * );
+#endif
+
     /** Tell if the context implements this type (e.g. ECKEY can do ECDSA) */
     int (*can_do)( mbedtls_pk_type_t type );
 

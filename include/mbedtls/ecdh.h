@@ -35,6 +35,7 @@
 #define MBEDTLS_ECDH_H
 
 #include "ecp.h"
+#include "pk.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,10 +60,14 @@ typedef struct mbedtls_ecdh_context
     mbedtls_ecp_point Q;     /*!< The public key. */
     mbedtls_ecp_point Qp;    /*!< The value of the public key of the peer. */
     mbedtls_mpi z;           /*!< The shared secret. */
-    int point_format;        /*!< The format of point export in TLS messages. */
     mbedtls_ecp_point Vi;    /*!< The blinding value. */
     mbedtls_ecp_point Vf;    /*!< The unblinding value. */
     mbedtls_mpi _d;          /*!< The previous \p d. */
+    unsigned int point_format : 4;  /*!<  format for point export in TLS messages       */
+#if defined(MBEDTLS_ECP_ATCA)
+    unsigned int use_atca : 1;
+    unsigned int atca_slot : 4;
+#endif
 }
 mbedtls_ecdh_context;
 
@@ -200,7 +205,7 @@ int mbedtls_ecdh_read_params( mbedtls_ecdh_context *ctx,
  * \return          An \c MBEDTLS_ERR_ECP_XXX error code on failure.
  *
  */
-int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx, const mbedtls_ecp_keypair *key,
+int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx, mbedtls_pk_context *pk,
                      mbedtls_ecdh_side side );
 
 /**

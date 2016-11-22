@@ -34,6 +34,7 @@
 #if defined(MBEDTLS_ECDSA_C)
 
 #include "mbedtls/ecdsa.h"
+#include "mbedtls/ecp_atca.h"
 #include "mbedtls/asn1write.h"
 
 #include <string.h>
@@ -289,8 +290,8 @@ cleanup:
 /*
  * Convert a signature (given by context) to ASN.1
  */
-static int ecdsa_signature_to_asn1( const mbedtls_mpi *r, const mbedtls_mpi *s,
-                                    unsigned char *sig, size_t *slen )
+int ecdsa_signature_to_asn1( const mbedtls_mpi *r, const mbedtls_mpi *s,
+                             unsigned char *sig, size_t *slen )
 {
     int ret;
     unsigned char buf[MBEDTLS_ECDSA_MAX_LEN];
@@ -395,6 +396,14 @@ int mbedtls_ecdsa_read_signature( mbedtls_ecdsa_context *ctx,
         ret += MBEDTLS_ERR_ECP_BAD_INPUT_DATA;
         goto cleanup;
     }
+
+#ifdef MBEDTLS_ECP_ATCA
+    ret = ecdsa_atca_verify(ctx, hash, hlen, &r, &s);
+    if (ret != MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE) goto cleanup;
+    /* If the chip is unavailable, fall through to software impl. */
+#endif
+    fprintf(stderr, "SW ECDSA verify curve %d hash_len %d sig_len %d\n",
+            ctx->grp.id, (int) hlen, (int) slen);
 
     if( ( ret = mbedtls_ecdsa_verify( &ctx->grp, hash, hlen,
                               &ctx->Q, &r, &s ) ) != 0 )
