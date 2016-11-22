@@ -597,6 +597,9 @@ void mbedtls_ecdsa_restart_init( mbedtls_ecdsa_restart_ctx *ctx );
 void mbedtls_ecdsa_restart_free( mbedtls_ecdsa_restart_ctx *ctx );
 #endif /* MBEDTLS_ECP_RESTARTABLE */
 
+int ecdsa_signature_to_asn1( const mbedtls_mpi *r, const mbedtls_mpi *s,
+                             unsigned char *sig, size_t *slen );
+
 #ifdef __cplusplus
 }
 #endif

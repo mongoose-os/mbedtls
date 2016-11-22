@@ -41,6 +41,10 @@
 #include "mbedtls/ssl.h"
 #include "mbedtls/ssl_internal.h"
 
+#if defined(MBEDTLS_ECP_ATCA)
+#include "mbedtls/ecp_atca.h"
+#endif
+
 #include <string.h>
 
 #include <stdint.h>
@@ -217,8 +221,19 @@ static void ssl_write_signature_algorithms_ext( mbedtls_ssl_context *ssl,
     for( md = ssl->conf->sig_hashes; *md != MBEDTLS_MD_NONE; md++ )
     {
 #if defined(MBEDTLS_ECDSA_C)
-        sig_alg_list[sig_alg_len++] = mbedtls_ssl_hash_from_md_alg( *md );
-        sig_alg_list[sig_alg_len++] = MBEDTLS_SSL_SIG_ECDSA;
+#if defined(MBEDTLS_ECP_ATCA)
+        /*
+         * If crypto chip is being used, we only advertise SHA256 as that is
+         * the only algo supported by the chip, so we can actually
+         * benefit from acceleration. Otherwise server tends to pick stronger
+         * algo (typically SHA512) and we can't use chip for verification.
+         */
+        if (!mbedtls_atca_is_available() || *md == MBEDTLS_MD_SHA256)
+#endif
+        {
+            sig_alg_list[sig_alg_len++] = mbedtls_ssl_hash_from_md_alg( *md );
+            sig_alg_list[sig_alg_len++] = MBEDTLS_SSL_SIG_ECDSA;
+        }
 #endif
 #if defined(MBEDTLS_RSA_C)
         sig_alg_list[sig_alg_len++] = mbedtls_ssl_hash_from_md_alg( *md );
@@ -293,7 +308,14 @@ static void ssl_write_supported_elliptic_curves_ext( mbedtls_ssl_context *ssl,
             MBEDTLS_SSL_DEBUG_MSG( 1, ( "invalid curve in ssl configuration" ) );
             return;
         }
-
+#if defined(MBEDTLS_ECP_ATCA)
+        /*
+         * If crypto chip is being used, we only advertise P-256 as that is
+         * the only curve supported by the chip, so we can actually
+         * benefit from acceleration.
+         */
+        if (mbedtls_atca_is_available() && info->grp_id != MBEDTLS_ECP_DP_SECP256R1) continue;
+#endif
         elliptic_curve_len += 2;
     }
 
@@ -314,6 +336,9 @@ static void ssl_write_supported_elliptic_curves_ext( mbedtls_ssl_context *ssl,
     {
 #if defined(MBEDTLS_ECP_C)
         info = mbedtls_ecp_curve_info_from_grp_id( *grp_id );
+#endif
+#if defined(MBEDTLS_ECP_ATCA)
+        if (mbedtls_atca_is_available() && info->grp_id != MBEDTLS_ECP_DP_SECP256R1) continue;
 #endif
         elliptic_curve_list[elliptic_curve_len++] = info->tls_id >> 8;
         elliptic_curve_list[elliptic_curve_len++] = info->tls_id & 0xFF;
@@ -947,6 +972,9 @@ static int ssl_write_client_hello( mbedtls_ssl_context *ssl )
     for( i = 0; ciphersuites[i] != 0; i++ )
     {
         ciphersuite_info = mbedtls_ssl_ciphersuite_from_id( ciphersuites[i] );
+
+        MBEDTLS_SSL_DEBUG_MSG( 3, ( "client hello, check ciphersuite: %04x %s",
+                                    ciphersuites[i], mbedtls_ssl_get_ciphersuite_name(ciphersuites[i]) ) );
 
         if( ssl_validate_ciphersuite( ciphersuite_info, ssl,
                                       ssl->conf->min_minor_ver,
@@ -2344,7 +2372,6 @@ static int ssl_parse_signature_algorithm( mbedtls_ssl_context *ssl,
 static int ssl_get_ecdh_params_from_cert( mbedtls_ssl_context *ssl )
 {
     int ret;
-    const mbedtls_ecp_keypair *peer_key;
 
     if( ssl->session_negotiate->peer_cert == NULL )
     {
@@ -2359,10 +2386,9 @@ static int ssl_get_ecdh_params_from_cert( mbedtls_ssl_context *ssl )
         return( MBEDTLS_ERR_SSL_PK_TYPE_MISMATCH );
     }
 
-    peer_key = mbedtls_pk_ec( ssl->session_negotiate->peer_cert->pk );
-
-    if( ( ret = mbedtls_ecdh_get_params( &ssl->handshake->ecdh_ctx, peer_key,
-                                 MBEDTLS_ECDH_THEIRS ) ) != 0 )
+    if( ( ret = mbedtls_ecdh_get_params( &ssl->handshake->ecdh_ctx,
+                                 &ssl->session_negotiate->peer_cert->pk,
+                                 MBEDTLS_ECDH_THEIRS) ) != 0 )
     {
         MBEDTLS_SSL_DEBUG_RET( 1, ( "mbedtls_ecdh_get_params" ), ret );
         return( ret );
