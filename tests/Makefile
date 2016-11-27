@@ -6,7 +6,7 @@ CFLAGS	?= -O2
 WARNING_CFLAGS ?= -Wall -W -Wdeclaration-after-statement -Wno-unused-function -Wno-unused-value
 LDFLAGS ?=
 
-LOCAL_CFLAGS = $(WARNING_CFLAGS) -I../include -D_FILE_OFFSET_BITS=64
+LOCAL_CFLAGS = -MD $(WARNING_CFLAGS) -I../include -D_FILE_OFFSET_BITS=64
 LOCAL_LDFLAGS = -L../library			\
 		-lmbedtls$(SHARED_SUFFIX)	\
 		-lmbedx509$(SHARED_SUFFIX)	\
@@ -25,6 +25,13 @@ endif
 
 ifdef DEBUG
 LOCAL_CFLAGS += -g3
+endif
+
+ifdef ASAN
+CC = clang
+LD = clang
+LOCAL_CFLAGS += -g3 -fsanitize=address
+LOCAL_LDFLAGS += -fsanitize=address
 endif
 
 # if we're running on Windows, build for Windows
@@ -105,7 +112,7 @@ $(BINARIES): %$(EXEXT): %.c $(DEP)
 
 clean:
 ifndef WINDOWS
-	rm -rf $(BINARIES) *.c *.datax TESTS
+	rm -rf $(BINARIES) *.c *.d *.datax TESTS
 else
 	del /Q /F *.c *.exe *.datax
 ifneq ($(wildcard TESTS/.*),)
@@ -136,3 +143,4 @@ $(EMBEDDED_TESTS): embedded_%: suites/$$(firstword $$(subst ., ,$$*)).function s
 
 generate-target-tests: $(EMBEDDED_TESTS)
 
+-include $(wildcard *.d)
