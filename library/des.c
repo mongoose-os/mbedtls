@@ -31,7 +31,7 @@
 #include MBEDTLS_CONFIG_FILE
 #endif
 
-#if defined(MBEDTLS_DES_C)
+#if defined(MBEDTLS_DES_C) || defined(MBEDTLS_DES_C_ONLY)
 
 #include "mbedtls/des.h"
 #include "mbedtls/platform_util.h"

@@ -31,7 +31,7 @@
 #include MBEDTLS_CONFIG_FILE
 #endif
 
-#if defined(MBEDTLS_MD4_C)
+#if defined(MBEDTLS_MD4_C) || defined(MBEDTLS_MD4_C_ONLY)
 
 #include "mbedtls/md4.h"
 #include "mbedtls/platform_util.h"
