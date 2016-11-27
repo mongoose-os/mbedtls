@@ -42,3 +42,6 @@ massif-*
 /TAGS
 /cscope*.out
 /tags
+
+# Make dependency files
+*.d
