@@ -1,3 +1,4 @@
+*.d
 *.sln
 *.vcxproj
 
