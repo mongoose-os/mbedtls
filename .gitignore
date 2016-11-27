@@ -41,3 +41,6 @@ massif-*
 /GTAGS
 /TAGS
 /tags
+
+# Make dependency files
+*.d
