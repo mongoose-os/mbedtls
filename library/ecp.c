@@ -125,6 +125,10 @@ typedef enum
  */
 static const mbedtls_ecp_curve_info ecp_supported_curves[] =
 {
+/* Cesanta note: prefer 256R1 b/c of performance and also cryptochip support. */
+#if defined(MBEDTLS_ECP_DP_SECP256R1_ENABLED)
+    { MBEDTLS_ECP_DP_SECP256R1,    23,     256,    "secp256r1"         },
+#endif
 #if defined(MBEDTLS_ECP_DP_SECP521R1_ENABLED)
     { MBEDTLS_ECP_DP_SECP521R1,    25,     521,    "secp521r1"         },
 #endif
@@ -136,9 +140,6 @@ static const mbedtls_ecp_curve_info ecp_supported_curves[] =
 #endif
 #if defined(MBEDTLS_ECP_DP_BP384R1_ENABLED)
     { MBEDTLS_ECP_DP_BP384R1,      27,     384,    "brainpoolP384r1"   },
-#endif
-#if defined(MBEDTLS_ECP_DP_SECP256R1_ENABLED)
-    { MBEDTLS_ECP_DP_SECP256R1,    23,     256,    "secp256r1"         },
 #endif
 #if defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED)
     { MBEDTLS_ECP_DP_SECP256K1,    22,     256,    "secp256k1"         },
