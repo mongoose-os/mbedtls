@@ -1107,6 +1107,7 @@ struct mbedtls_ssl_context
     /*
      * Record layer (incoming data)
      */
+    size_t in_buf_size;         /*!< current size of the input buffer */
     unsigned char *in_buf;      /*!< input buffer                     */
     unsigned char *in_ctr;      /*!< 64-bit incoming message counter
                                      TLS: maintained by us
@@ -1145,12 +1146,19 @@ struct mbedtls_ssl_context
     /*
      * Record layer (outgoing data)
      */
-    unsigned char *out_buf;     /*!< output buffer                    */
-    unsigned char *out_ctr;     /*!< 64-bit outgoing message counter  */
-    unsigned char *out_hdr;     /*!< start of record header           */
-    unsigned char *out_len;     /*!< two-bytes message length field   */
-    unsigned char *out_iv;      /*!< ivlen-byte IV                    */
-    unsigned char *out_msg;     /*!< message contents (out_iv+ivlen)  */
+    /*
+     * Note: because dynamic out_buf resizing requires special care,
+     * out_* members have been renamed to make integrating upstream easier:
+     * this way all new upstream code that works with these buffers will 
+     * fail to compile and thus will be easy to spot.
+     */
+    size_t dout_buf_size;
+    unsigned char *dout_buf;    /*!< output buffer                    */
+    unsigned char *dout_ctr;    /*!< 64-bit outgoing message counter  */
+    unsigned char *dout_hdr;    /*!< start of record header           */
+    unsigned char *dout_len;    /*!< two-bytes message length field   */
+    unsigned char *dout_iv;     /*!< ivlen-byte IV                    */
+    unsigned char *dout_msg;    /*!< message contents (out_iv+ivlen)  */
 
     int out_msgtype;            /*!< record header: message type      */
     size_t out_msglen;          /*!< record header: message length    */
