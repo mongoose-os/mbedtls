@@ -199,19 +199,16 @@
    implicit sequence number. */
 #define MBEDTLS_SSL_HEADER_LEN 13
 
-#define MBEDTLS_SSL_IN_BUFFER_LEN  \
-    ( ( MBEDTLS_SSL_HEADER_LEN ) + ( MBEDTLS_SSL_IN_PAYLOAD_LEN ) )
-
-#define MBEDTLS_SSL_OUT_BUFFER_LEN  \
-    ( ( MBEDTLS_SSL_HEADER_LEN ) + ( MBEDTLS_SSL_OUT_PAYLOAD_LEN ) )
+#define MBEDTLS_SSL_MAX_BUFFER_LEN  \
+    ( ( MBEDTLS_SSL_HEADER_LEN ) + \
+      ( MBEDTLS_SSL_IN_PAYLOAD_LEN > MBEDTLS_SSL_OUT_PAYLOAD_LEN \
+        ? MBEDTLS_SSL_IN_PAYLOAD_LEN                             \
+        : MBEDTLS_SSL_OUT_PAYLOAD_LEN )                          \
+    )                                                            \
 
 #ifdef MBEDTLS_ZLIB_SUPPORT
 /* Compression buffer holds both IN and OUT buffers, so should be size of the larger */
-#define MBEDTLS_SSL_COMPRESS_BUFFER_LEN (                               \
-        ( MBEDTLS_SSL_IN_BUFFER_LEN > MBEDTLS_SSL_OUT_BUFFER_LEN )      \
-        ? MBEDTLS_SSL_IN_BUFFER_LEN                                     \
-        : MBEDTLS_SSL_OUT_BUFFER_LEN                                    \
-        )
+#define MBEDTLS_SSL_COMPRESS_BUFFER_LEN MBEDTLS_SSL_MAX_BUFFER_LEN
 #endif
 
 /*
@@ -749,6 +746,38 @@ int mbedtls_ssl_get_key_exchange_md_tls1_2( mbedtls_ssl_context *ssl,
                                             mbedtls_md_type_t md_alg );
 #endif /* MBEDTLS_SSL_PROTO_TLS1 || MBEDTLS_SSL_PROTO_TLS1_1 || \
           MBEDTLS_SSL_PROTO_TLS1_2 */
+
+/*
+ * Buffer context holds pointers that reference parts of a buffer and that
+ * must be updated if the buffer's base address changes.
+ * Contexts can be chained if necessary, thus functions receiving a buf_ctx
+ * can append their own if needed.
+ */
+typedef struct mbedtls_buf_ctx {
+  struct mbedtls_buf_ctx *prev;
+  unsigned char **ptrs[4];
+} mbedtls_buf_ctx;
+
+/*
+ * mbedtls_ssl_resize_out_buf will ensure that out_buf has at least size bytes
+ * in out_buf following *p. out_buf will be reallocated if necessary and *p
+ * will be updated if out_buf address changes.
+ * If shrink is true and desired size is less than current, the buffer will
+ * be downsized.
+ * If bctx is not null, then pointers contained in it will also be updated on
+ * reallocation.
+ */
+int mbedtls_ssl_resize_out_buf(
+    mbedtls_ssl_context *ssl, unsigned char **p, size_t size, int shrink,
+    mbedtls_buf_ctx *bctx);
+
+int mbedtls_ssl_grow_out_buf(
+    mbedtls_ssl_context *ssl, unsigned char **p, size_t size,
+    mbedtls_buf_ctx *bctx );
+
+void mbedtls_ssl_shrink_out_buf(
+    mbedtls_ssl_context *ssl, unsigned char **p, size_t size,
+    mbedtls_buf_ctx *bctx );
 
 #ifdef __cplusplus
 }
