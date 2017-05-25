@@ -925,6 +925,7 @@ struct mbedtls_ssl_config
     const mbedtls_x509_crt_profile *cert_profile; /*!< verification profile */
     mbedtls_ssl_key_cert *key_cert; /*!< own certificate/key pair(s)        */
     mbedtls_x509_crt *ca_chain;     /*!< trusted CAs                        */
+    const char *ca_chain_file;
     mbedtls_x509_crl *ca_crl;       /*!< trusted CAs CRLs                   */
 #endif /* MBEDTLS_X509_CRT_PARSE_C */
 
@@ -2058,6 +2059,10 @@ void mbedtls_ssl_conf_cert_profile( mbedtls_ssl_config *conf,
 void mbedtls_ssl_conf_ca_chain( mbedtls_ssl_config *conf,
                                mbedtls_x509_crt *ca_chain,
                                mbedtls_x509_crl *ca_crl );
+
+int mbedtls_ssl_conf_ca_chain_file( mbedtls_ssl_config *conf,
+                                   const char *ca_chain_file,
+                                   mbedtls_x509_crl *ca_crl );
 
 /**
  * \brief          Set own certificate chain and private key

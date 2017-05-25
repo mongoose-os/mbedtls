@@ -174,6 +174,7 @@ mbedtls_x509write_cert;
 typedef struct {
     mbedtls_x509_crt *crt;
     uint32_t flags;
+    int own_crt;
 } mbedtls_x509_crt_verify_chain_item;
 
 /**
@@ -214,6 +215,7 @@ typedef struct
         x509_crt_rs_find_parent,
     } in_progress;  /* none if no operation is in progress */
     int self_cnt;
+    int own_child;
     mbedtls_x509_crt_verify_chain ver_chain;
 
 } mbedtls_x509_crt_restart_ctx;
@@ -312,6 +314,10 @@ int mbedtls_x509_crt_parse( mbedtls_x509_crt *chain, const unsigned char *buf, s
  *                 if partly successful or a specific X509 or PEM error code
  */
 int mbedtls_x509_crt_parse_file( mbedtls_x509_crt *chain, const char *path );
+
+#if defined(MBEDTLS_PEM_PARSE_C) && defined(MBEDTLS_X509_CA_CHAIN_ON_DISK)
+int mbedtls_x509_crt_set_ca_chain_file( mbedtls_x509_crt *chain, const char *path );
+#endif
 
 /**
  * \brief          Load one or more certificate files from a path and add them
@@ -453,6 +459,7 @@ int mbedtls_x509_crt_verify( mbedtls_x509_crt *crt,
  */
 int mbedtls_x509_crt_verify_with_profile( mbedtls_x509_crt *crt,
                      mbedtls_x509_crt *trust_ca,
+                     const char *trust_ca_file,
                      mbedtls_x509_crl *ca_crl,
                      const mbedtls_x509_crt_profile *profile,
                      const char *cn, uint32_t *flags,
@@ -483,6 +490,7 @@ int mbedtls_x509_crt_verify_with_profile( mbedtls_x509_crt *crt,
  */
 int mbedtls_x509_crt_verify_restartable( mbedtls_x509_crt *crt,
                      mbedtls_x509_crt *trust_ca,
+                     const char *trust_ca_file,
                      mbedtls_x509_crl *ca_crl,
                      const mbedtls_x509_crt_profile *profile,
                      const char *cn, uint32_t *flags,
