@@ -1046,7 +1046,7 @@ int mbedtls_x509_self_test( int verbose )
     if( verbose != 0 )
         mbedtls_printf( "passed\n  X.509 signature verify: ");
 
-    ret = mbedtls_x509_crt_verify( &clicert, &cacert, NULL, NULL, &flags, NULL, NULL );
+    ret = mbedtls_x509_crt_verify( &clicert, &cacert, NULL, NULL, NULL, &flags, NULL, NULL );
     if( ret != 0 )
     {
         if( verbose != 0 )
