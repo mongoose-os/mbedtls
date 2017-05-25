@@ -365,7 +365,12 @@ void x509_verify( char *crt_file, char *ca_file, char *crl_file,
     TEST_ASSERT( mbedtls_x509_crt_parse_file( &ca, ca_file ) == 0 );
     TEST_ASSERT( mbedtls_x509_crl_parse_file( &crl, crl_file ) == 0 );
 
-    res = mbedtls_x509_crt_verify_with_profile( &crt, &ca, &crl, profile, cn_name, &flags, f_vrfy, NULL );
+    res = mbedtls_x509_crt_verify_with_profile( &crt, &ca, NULL, &crl, profile, cn_name, &flags, f_vrfy, NULL );
+
+    TEST_ASSERT( res == ( result ) );
+    TEST_ASSERT( flags == (uint32_t)( flags_result ) );
+
+    res = mbedtls_x509_crt_verify_with_profile( &crt, NULL, ca_file, &crl, profile, cn_name, &flags, f_vrfy, NULL );
 
     TEST_ASSERT( res == ( result ) );
     TEST_ASSERT( flags == (uint32_t)( flags_result ) );
@@ -397,7 +402,7 @@ void x509_verify_callback( char *crt_file, char *ca_file, char *name,
     if( strcmp( name, "NULL" ) == 0 )
         name = NULL;
 
-    ret = mbedtls_x509_crt_verify_with_profile( &crt, &ca, NULL,
+    ret = mbedtls_x509_crt_verify_with_profile( &crt, &ca, NULL, NULL,
                                                 &compat_profile,
                                                 name, &flags,
                                                 verify_print, &vrfy_ctx );
@@ -624,7 +629,7 @@ void mbedtls_x509_crt_verify_max( char *ca_file, char *chain_dir, int nb_int,
     TEST_ASSERT( mbedtls_x509_crt_parse_file( &chain, file_buf ) == 0 );
 
     /* Try to verify that chain */
-    ret = mbedtls_x509_crt_verify( &chain, &trusted, NULL, NULL, &flags,
+    ret = mbedtls_x509_crt_verify( &chain, &trusted, NULL, NULL, NULL, &flags,
                                    NULL, NULL );
     TEST_ASSERT( ret == ret_chk );
     TEST_ASSERT( flags == (uint32_t) flags_chk );
@@ -664,7 +669,7 @@ void mbedtls_x509_crt_verify_chain(  char *chain_paths, char *trusted_ca,
     else if( strcmp( profile_name, "sha512" ) == 0 )
         profile = &profile_sha512;
 
-    res = mbedtls_x509_crt_verify_with_profile( &chain, &trusted, NULL, profile,
+    res = mbedtls_x509_crt_verify_with_profile( &chain, &trusted, NULL, NULL, profile,
             NULL, &flags, verify_fatal, &vrfy_fatal_lvls );
 
     TEST_ASSERT( res == ( result ) );
