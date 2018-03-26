@@ -92,10 +92,10 @@ int eckey_atca_sign_wrap( void *ctx, mbedtls_md_type_t md_alg,
   return 0;
 
 cleanup:
-  (void) ctx;
   (void) md_alg;
   (void) f_rng;
   (void) p_rng;
+  (void) ret;
   return MBEDTLS_ERR_ECP_SIGN_FAILED;
 }
 
@@ -217,6 +217,7 @@ int ecp_atca_ecdh_gen_keypair(mbedtls_ecp_point *Q, uint8_t *slot,
   return 0;
 
 cleanup:
+  (void) ret;
   return -1;
 }
 
@@ -233,7 +234,9 @@ int ecp_atca_ecdh_compute_pms(uint8_t slot, mbedtls_ecp_point *Qp, mbedtls_mpi *
   MBEDTLS_MPI_CHK(mbedtls_mpi_read_binary(z, pms, ATCA_KEY_SIZE));
   fprintf(stderr, "ATCA:%d ECDH ok\n", slot);
   return 0;
+
 cleanup:
+  (void) ret;
   return -1;
 }
 

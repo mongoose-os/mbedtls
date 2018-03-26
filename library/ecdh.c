@@ -56,10 +56,9 @@ static int mbedtls_ecdh_gen_public_2( mbedtls_ecdh_context *ctx,
                      void *p_rng )
 {
 #ifdef MBEDTLS_ECP_ATCA
-  int ret;
   uint8_t slot;
   if (ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 &&
-      (ret = ecp_atca_ecdh_gen_keypair(&ctx->Q, &slot, f_rng, p_rng)) == 0) {
+      ecp_atca_ecdh_gen_keypair(&ctx->Q, &slot, f_rng, p_rng) == 0) {
     ctx->use_atca = 1;
     ctx->atca_slot = slot;
     return 0;

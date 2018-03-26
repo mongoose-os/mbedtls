@@ -3016,7 +3016,7 @@ static int ssl_prepare_server_key_exchange( mbedtls_ssl_context *ssl,
     defined(MBEDTLS_KEY_EXCHANGE__WITH_SERVER_SIGNATURE__ENABLED)
     unsigned char *p = buf + 4;
     unsigned char *dig_signed = p;
-    size_t dig_signed_len = 0, len;
+    size_t dig_signed_len = 0, len = 0;
     ((void) dig_signed);
     ((void) dig_signed_len);
     ((void) len);

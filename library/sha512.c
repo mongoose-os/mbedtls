@@ -61,16 +61,22 @@
  * 64-bit integer manipulation macros (big endian)
  */
 #ifndef GET_UINT64_BE
+/* Workaround for https://e2e.ti.com/support/development_tools/compiler/f/343/t/677319 */
+#ifndef GET_UINT32_BE
+#define GET_UINT32_BE(n,b,i)                            \
+do {                                                    \
+    (n) = ( (uint32_t) (b)[(i)    ] << 24 )             \
+        | ( (uint32_t) (b)[(i) + 1] << 16 )             \
+        | ( (uint32_t) (b)[(i) + 2] <<  8 )             \
+        | ( (uint32_t) (b)[(i) + 3]       );            \
+} while( 0 )
+#endif
 #define GET_UINT64_BE(n,b,i)                            \
 {                                                       \
-    (n) = ( (uint64_t) (b)[(i)    ] << 56 )       \
-        | ( (uint64_t) (b)[(i) + 1] << 48 )       \
-        | ( (uint64_t) (b)[(i) + 2] << 40 )       \
-        | ( (uint64_t) (b)[(i) + 3] << 32 )       \
-        | ( (uint64_t) (b)[(i) + 4] << 24 )       \
-        | ( (uint64_t) (b)[(i) + 5] << 16 )       \
-        | ( (uint64_t) (b)[(i) + 6] <<  8 )       \
-        | ( (uint64_t) (b)[(i) + 7]       );      \
+    uint32_t t1, t2;                                    \
+    GET_UINT32_BE(t1,(b),(i));                          \
+    GET_UINT32_BE(t2,(b),(i)+4);                        \
+    (n) = (((uint64_t) t1) << 32) | ((uint64_t) t2);    \
 }
 #endif /* GET_UINT64_BE */
 
