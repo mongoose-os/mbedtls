@@ -1107,6 +1107,7 @@ int mbedtls_mpi_sub_int( mbedtls_mpi *X, const mbedtls_mpi *A, mbedtls_mpi_sint 
     return( mbedtls_mpi_sub_mpi( X, A, &_B ) );
 }
 
+#if !defined(MBEDTLS_MPI_MUL_MPI_ALT)
 /*
  * Helper for mbedtls_mpi multiplication
  */
@@ -1215,6 +1216,7 @@ cleanup:
 
     return( ret );
 }
+#endif
 
 /*
  * Baseline multiplication: X = A * b
@@ -1539,6 +1541,7 @@ int mbedtls_mpi_mod_int( mbedtls_mpi_uint *r, const mbedtls_mpi *A, mbedtls_mpi_
     return( 0 );
 }
 
+#if !defined(MBEDTLS_MPI_EXP_MOD_ALT)
 /*
  * Fast Montgomery initialization (thanks to Tom St Denis)
  */
@@ -1820,6 +1823,7 @@ cleanup:
 
     return( ret );
 }
+#endif
 
 /*
  * Greatest common divisor: G = gcd(A, B)  (HAC 14.54)
