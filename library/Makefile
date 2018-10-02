@@ -15,7 +15,7 @@ endif
 ifdef ASAN
 CC = clang
 LD = clang
-LOCAL_CFLAGS += -g3 -fsanitize=address
+LOCAL_CFLAGS += -g3 -fsanitize=address '-DMBEDTLS_USER_CONFIG_FILE="../programs/mbedtls_platform_config.h"' -Wall -Wextra -Werror
 LOCAL_LDFLAGS += -fsanitize=address
 endif
 
