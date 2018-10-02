@@ -74,7 +74,7 @@ int main( void )
 #define DFL_SERVER_PORT         "4433"
 #define DFL_REQUEST_PAGE        "/"
 #define DFL_REQUEST_SIZE        -1
-#define DFL_DEBUG_LEVEL         0
+#define DFL_DEBUG_LEVEL         4
 #define DFL_NBIO                0
 #define DFL_EVENT               0
 #define DFL_READ_TIMEOUT        0
@@ -116,7 +116,7 @@ int main( void )
 #define DFL_EXTENDED_MS         -1
 #define DFL_ETM                 -1
 
-#define GET_REQUEST "GET %s HTTP/1.0\r\nExtra-header: "
+#define GET_REQUEST "GET %s HTTP/1.0\r\nHost: %s\r\nExtra-header: "
 #define GET_REQUEST_END "\r\n\r\n"
 
 #if defined(MBEDTLS_X509_CRT_PARSE_C)
@@ -394,6 +394,13 @@ static void my_debug( void *ctx, int level,
     mbedtls_fprintf( (FILE *) ctx, "%s:%04d: |%d| %s",
                      basename, line, level, str );
     fflush(  (FILE *) ctx  );
+}
+
+static int my_random(void *ctx, unsigned char *out, size_t len) {
+    size_t i = 0;
+    for (i = 0; i < len; i++) out[i] = '0' + i % 10;
+    (void) ctx;
+    return 0;
 }
 
 /*
@@ -1194,8 +1201,8 @@ int main( int argc, char *argv[] )
     fflush( stdout );
 
     mbedtls_entropy_init( &entropy );
-    if( ( ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func,
-                                       &entropy, (const unsigned char *) pers,
+    if( ( ret = mbedtls_ctr_drbg_seed( &ctr_drbg, my_random,
+                                       NULL, (const unsigned char *) pers,
                                        strlen( pers ) ) ) != 0 )
     {
         mbedtls_printf( " failed\n  ! mbedtls_ctr_drbg_seed returned -0x%x\n",
@@ -1220,7 +1227,7 @@ int main( int argc, char *argv[] )
     else
 #if defined(MBEDTLS_FS_IO)
     if( strlen( opt.ca_path ) )
-        ret = mbedtls_x509_crt_parse_path( &cacert, opt.ca_path );
+        ret = -1; //mbedtls_x509_crt_parse_path( &cacert, opt.ca_path );
     else if( strlen( opt.ca_file ) )
         ret = mbedtls_x509_crt_parse_file( &cacert, opt.ca_file );
     else
@@ -1445,7 +1452,7 @@ int main( int argc, char *argv[] )
         }
 #endif
 
-    mbedtls_ssl_conf_rng( &conf, mbedtls_ctr_drbg_random, &ctr_drbg );
+    mbedtls_ssl_conf_rng( &conf, my_random, NULL );
     mbedtls_ssl_conf_dbg( &conf, my_debug, stdout );
 
     mbedtls_ssl_conf_read_timeout( &conf, opt.read_timeout );
@@ -1732,7 +1739,8 @@ send_request:
     fflush( stdout );
 
     len = mbedtls_snprintf( (char *) buf, sizeof( buf ) - 1, GET_REQUEST,
-                            opt.request_page );
+                            opt.request_page,
+                            opt.server_addr );
     tail_len = (int) strlen( GET_REQUEST_END );
 
     /* Add padding to GET request to reach opt.request_size in length */
@@ -1857,6 +1865,7 @@ send_request:
      */
     if( opt.transport == MBEDTLS_SSL_TRANSPORT_STREAM )
     {
+        size_t tot_len = 0;
         do
         {
             len = sizeof( buf ) - 1;
@@ -1907,7 +1916,9 @@ send_request:
 
             len = ret;
             buf[len] = '\0';
-            mbedtls_printf( " %d bytes read\n\n%s", len, (char *) buf );
+            tot_len += len;
+            mbedtls_printf( " %d bytes read, total %ld\n\n%s",
+                len, (long) tot_len, (char *) buf );
 
             /* End of message should be detected according to the syntax of the
              * application protocol (eg HTTP), just use a dummy test here. */
