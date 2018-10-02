@@ -6064,7 +6064,13 @@ crt_verify:
 
         if( ret != 0 )
         {
-            MBEDTLS_SSL_DEBUG_RET( 1, "x509_verify_cert", ret );
+            MBEDTLS_SSL_DEBUG_MSG( 1, ( "x509_verify_cert returned %d", ret ) );
+            if ( ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED )
+            {
+                char buf[256];
+                mbedtls_x509_crt_verify_info( buf, sizeof(buf), "  ", ssl->session_negotiate->verify_result );
+                MBEDTLS_SSL_DEBUG_MSG( 1, ( "%s", buf ) );
+            }
             return( ret );
         }
 

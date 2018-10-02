@@ -2668,7 +2668,7 @@ static int ssl_write_server_hello( mbedtls_ssl_context *ssl )
     *p++ = (unsigned char)( ssl->session_negotiate->ciphersuite      );
     *p++ = (unsigned char)( ssl->session_negotiate->compression      );
 
-    MBEDTLS_SSL_DEBUG_MSG( 3, ( "server hello, chosen ciphersuite: %s",
+    MBEDTLS_SSL_DEBUG_MSG( 1, ( "ciphersuite: %s",
            mbedtls_ssl_get_ciphersuite_name( ssl->session_negotiate->ciphersuite ) ) );
     MBEDTLS_SSL_DEBUG_MSG( 3, ( "server hello, compress alg.: 0x%02X",
                    ssl->session_negotiate->compression ) );
