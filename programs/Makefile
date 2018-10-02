@@ -2,9 +2,9 @@
 # To compile on SunOS: add "-lsocket -lnsl" to LDFLAGS
 # To compile with PKCS11: add "-lpkcs11-helper" to LDFLAGS
 
-CFLAGS	?= -O2
-WARNING_CFLAGS ?= -Wall -W -Wdeclaration-after-statement
-WARNING_CXXFLAGS ?= -Wall -W
+CFLAGS	?= -O2 -I../programs
+WARNING_CFLAGS ?= -MD -Wall -W -Wdeclaration-after-statement
+WARNING_CXXFLAGS ?= -MD -Wall -W
 LDFLAGS ?=
 
 LOCAL_CFLAGS = $(WARNING_CFLAGS) -I../include -D_FILE_OFFSET_BITS=64
@@ -98,7 +98,7 @@ endif
 all: $(APPS)
 
 $(DEP):
-	$(MAKE) -C ../library
+	$(MAKE) -C ../library CFLAGS=-I../programs
 
 aes/aescrypt2$(EXEXT): aes/aescrypt2.c $(DEP)
 	echo "  CC    aes/aescrypt2.c"
@@ -306,10 +306,12 @@ x509/req_app$(EXEXT): x509/req_app.c $(DEP)
 
 clean:
 ifndef WINDOWS
-	rm -f $(APPS)
+	rm -f */*.d $(APPS)
 else
 	del /S /Q /F *.o *.exe
 endif
 
 list:
 	echo $(APPS)
+
+-include $(wildcard */*.d)
