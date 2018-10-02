@@ -2,9 +2,9 @@
 # To compile on SunOS: add "-lsocket -lnsl" to LDFLAGS
 # To compile with PKCS11: add "-lpkcs11-helper" to LDFLAGS
 
-CFLAGS	?= -O2
-WARNING_CFLAGS ?= -Wall -W -Wdeclaration-after-statement
-WARNING_CXXFLAGS ?= -Wall -W
+CFLAGS	?= -O0 -I../programs
+WARNING_CFLAGS ?= -MD -Wall -W -Wdeclaration-after-statement
+WARNING_CXXFLAGS ?= -MD -Wall -W
 LDFLAGS ?=
 
 LOCAL_CFLAGS = $(WARNING_CFLAGS) -I../include -D_FILE_OFFSET_BITS=64
@@ -27,7 +27,7 @@ endif
 ifdef ASAN
 CC = clang
 LD = clang
-LOCAL_CFLAGS += -g3 -fsanitize=address
+LOCAL_CFLAGS += -g3 -fsanitize=address '-DMBEDTLS_USER_CONFIG_FILE="../programs/mbedtls_platform_config.h"'
 LOCAL_LDFLAGS += -fsanitize=address
 endif
 
@@ -98,7 +98,7 @@ endif
 all: $(APPS)
 
 $(DEP):
-	$(MAKE) -C ../library
+	$(MAKE) -C ../library CFLAGS=-I../programs
 
 aes/aescrypt2$(EXEXT): aes/aescrypt2.c $(DEP)
 	echo "  CC    aes/aescrypt2.c"
@@ -305,9 +305,12 @@ ifndef WINDOWS
 	rm -f $(APPS)
 	-rm -f ssl/ssl_pthread_server$(EXEXT)
 	-rm -f test/cpp_dummy_build$(EXEXT)
+	rm -f */*.d $(APPS)
 else
 	del /S /Q /F *.o *.exe
 endif
 
 list:
 	echo $(APPS)
+
+-include $(wildcard */*.d)
