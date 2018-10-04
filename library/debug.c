@@ -131,6 +131,12 @@ void mbedtls_debug_print_ret( const mbedtls_ssl_context *ssl, int level,
      */
     if( ret == MBEDTLS_ERR_SSL_WANT_READ )
         return;
+    /*
+     * Cesanta: Well, turns out MBEDTLS_ERR_SSL_WANT_WRITE is not that rare
+     * in our environment, so *do* ignore it.
+     */
+    if( ret == MBEDTLS_ERR_SSL_WANT_WRITE )
+        return;
 
     mbedtls_snprintf( str, sizeof( str ), "%s() returned %d (-0x%04x)\n",
               text, ret, -ret );
