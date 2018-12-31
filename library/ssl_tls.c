@@ -4532,6 +4532,9 @@ int mbedtls_ssl_read_record( mbedtls_ssl_context *ssl,
 
         if( 0 != ret )
         {
+            if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+                return( MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY );
+
             MBEDTLS_SSL_DEBUG_RET( 1, ( "mbedtls_ssl_handle_message_type" ), ret );
             return( ret );
         }
@@ -8467,6 +8470,9 @@ int mbedtls_ssl_read( mbedtls_ssl_context *ssl, unsigned char *buf, size_t len )
         {
             if( ret == MBEDTLS_ERR_SSL_CONN_EOF )
                 return( 0 );
+
+            if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+                return( MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY );
 
             MBEDTLS_SSL_DEBUG_RET( 1, "mbedtls_ssl_read_record", ret );
             return( ret );
