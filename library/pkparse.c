@@ -137,7 +137,7 @@ int mbedtls_pk_parse_keyfile( mbedtls_pk_context *ctx,
         return MBEDTLS_ERR_PK_BAD_INPUT_DATA;
       }
       ret = mbedtls_pk_setup(ctx, &mbedtls_eckey_atca_info);
-      ctx->pk_ctx = (void *) (slot + 1);
+      ctx->pk_ctx = (void *) ((intptr_t) (slot + 1));
       return ret;
     }
 #endif /* MBEDTLS_ECP_ATCA */

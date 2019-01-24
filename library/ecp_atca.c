@@ -69,11 +69,11 @@ int eckey_atca_sign_wrap( void *ctx, mbedtls_md_type_t md_alg,
   mbedtls_mpi r, s;
   ATCA_STATUS status;
   uint8_t raw_sig[ATCA_SIG_SIZE];
-  int slot = ((int) ctx) - 1;
+  int slot = ((intptr_t) ctx) - 1;
 
   /* Can only sign 256-bit digests. */
   if (hash_len != 32) {
-    fprintf(stderr, "ATCA:%d ECDSA sign failed: expected 32 bytes to sign, got %d\n", slot, hash_len);
+    fprintf(stderr, "ATCA:%d ECDSA sign failed: expected 32 bytes to sign, got %d\n", slot, (int) hash_len);
     return MBEDTLS_ERR_ECP_BAD_INPUT_DATA;
   }
   if ((status = atcab_sign(slot, hash, raw_sig)) != ATCA_SUCCESS) {
