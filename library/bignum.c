@@ -955,6 +955,11 @@ int mbedtls_mpi_read_binary_le( mbedtls_mpi *X,
 
 cleanup:
 
+    /*
+     * This function is also used to import keys. However, wiping the buffers
+     * upon failure is not necessary because failure only can happen before any
+     * input is copied.
+     */
     return( ret );
 }
 
@@ -992,6 +997,11 @@ int mbedtls_mpi_read_binary( mbedtls_mpi *X, const unsigned char *buf, size_t bu
 
 cleanup:
 
+    /*
+     * This function is also used to import keys. However, wiping the buffers
+     * upon failure is not necessary because failure only can happen before any
+     * input is copied.
+     */
     return( ret );
 }
 
