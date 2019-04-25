@@ -40,6 +40,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+#if defined(MBEDTLS_PLATFORM_C)
+#include "mbedtls/platform.h"
+#else
+#include <stdio.h>
+#define mbedtls_printf printf
+#define mbedtls_calloc calloc
+#define mbedtls_free   free
+#endif
+
 #if defined(MBEDTLS_PEM_WRITE_C)
 #include "mbedtls/pem.h"
 #endif
@@ -239,23 +248,29 @@ int mbedtls_x509write_csr_pem( mbedtls_x509write_csr *ctx, unsigned char *buf, s
                        void *p_rng )
 {
     int ret;
-    unsigned char output_buf[4096];
     size_t olen = 0;
+    unsigned char *output_buf = mbedtls_calloc(1, 4096);
+
+    if( output_buf == NULL )
+    {
+        return( MBEDTLS_ERR_X509_ALLOC_FAILED );
+    }
 
     if( ( ret = mbedtls_x509write_csr_der( ctx, output_buf, sizeof(output_buf),
                                    f_rng, p_rng ) ) < 0 )
     {
-        return( ret );
+        goto out;
     }
 
-    if( ( ret = mbedtls_pem_write_buffer( PEM_BEGIN_CSR, PEM_END_CSR,
-                                  output_buf + sizeof(output_buf) - ret,
-                                  ret, buf, size, &olen ) ) != 0 )
-    {
-        return( ret );
-    }
+    ret = mbedtls_pem_write_buffer( PEM_BEGIN_CSR, PEM_END_CSR,
+                            output_buf + sizeof(output_buf) - ret,
+                            ret, buf, size, &olen );
 
-    return( 0 );
+out:
+
+    mbedtls_free( output_buf );
+
+    return( ret );
 }
 #endif /* MBEDTLS_PEM_WRITE_C */
 
