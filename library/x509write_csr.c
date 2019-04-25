@@ -40,6 +40,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+#if defined(MBEDTLS_PLATFORM_C)
+#include "mbedtls/platform.h"
+#else
+#include <stdio.h>
+#define mbedtls_printf printf
+#define mbedtls_calloc calloc
+#define mbedtls_free   free
+#endif
+
 #if defined(MBEDTLS_PEM_WRITE_C)
 #include "mbedtls/pem.h"
 #endif
@@ -239,23 +248,41 @@ int mbedtls_x509write_csr_pem( mbedtls_x509write_csr *ctx, unsigned char *buf, s
                        void *p_rng )
 {
     int ret;
-    unsigned char output_buf[4096];
     size_t olen = 0;
+    unsigned char *der_buf = NULL;
+    size_t der_buf_size = 0;
 
-    if( ( ret = mbedtls_x509write_csr_der( ctx, output_buf, sizeof(output_buf),
-                                   f_rng, p_rng ) ) < 0 )
+    while( 1 )
     {
-        return( ret );
+        der_buf_size += 128;
+
+        if( ( der_buf = (unsigned char *) calloc(1, der_buf_size) ) == NULL )
+        {
+            return( MBEDTLS_ERR_X509_ALLOC_FAILED );
+        }
+
+        ret = mbedtls_x509write_csr_der( ctx, der_buf, der_buf_size, f_rng, p_rng );
+
+        if( ret < 0 )
+        {
+            if( ret == MBEDTLS_ERR_ASN1_BUF_TOO_SMALL )
+            {
+                mbedtls_free( der_buf );
+                continue;
+            }
+            break;
+        }
+
+        ret = mbedtls_pem_write_buffer( PEM_BEGIN_CSR, PEM_END_CSR,
+                                der_buf + der_buf_size - ret,
+                                ret, buf, size, &olen );
+
+        break;
     }
 
-    if( ( ret = mbedtls_pem_write_buffer( PEM_BEGIN_CSR, PEM_END_CSR,
-                                  output_buf + sizeof(output_buf) - ret,
-                                  ret, buf, size, &olen ) ) != 0 )
-    {
-        return( ret );
-    }
+    mbedtls_free( der_buf );
 
-    return( 0 );
+    return( ret );
 }
 #endif /* MBEDTLS_PEM_WRITE_C */
 
