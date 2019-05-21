@@ -3680,6 +3680,17 @@ int mbedtls_ssl_handshake_client_step( mbedtls_ssl_context *ssl )
 
        case MBEDTLS_SSL_SERVER_CERTIFICATE:
            ret = mbedtls_ssl_parse_certificate( ssl );
+#ifdef MBEDTLS_FREE_CERT_CHAIN
+           /* After verification we don't need the rest of the chain anymore. */
+           mbedtls_x509_crt *peer_cert = ssl->session_negotiate->peer_cert;
+           if( peer_cert != NULL && peer_cert->next != NULL )
+           {
+               MBEDTLS_SSL_DEBUG_MSG( 2, ( "free extra certs" ) );
+               mbedtls_x509_crt_free(peer_cert->next);
+               mbedtls_free(peer_cert->next);
+               peer_cert->next = NULL;
+           }
+#endif
            break;
 
        case MBEDTLS_SSL_SERVER_KEY_EXCHANGE:
