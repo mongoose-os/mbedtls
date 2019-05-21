@@ -3626,6 +3626,9 @@ static int ssl_parse_new_session_ticket( mbedtls_ssl_context *ssl )
 int mbedtls_ssl_handshake_client_step( mbedtls_ssl_context *ssl )
 {
     int ret = 0;
+#ifdef MBEDTLS_FREE_CERT_CHAIN
+    mbedtls_x509_crt *peer_cert;
+#endif
 
     if( ssl->state == MBEDTLS_SSL_HANDSHAKE_OVER || ssl->handshake == NULL )
         return( MBEDTLS_ERR_SSL_BAD_INPUT_DATA );
@@ -3682,7 +3685,7 @@ int mbedtls_ssl_handshake_client_step( mbedtls_ssl_context *ssl )
            ret = mbedtls_ssl_parse_certificate( ssl );
 #ifdef MBEDTLS_FREE_CERT_CHAIN
            /* After verification we don't need the rest of the chain anymore. */
-           mbedtls_x509_crt *peer_cert = ssl->session_negotiate->peer_cert;
+           peer_cert = ssl->session_negotiate->peer_cert;
            if( peer_cert != NULL && peer_cert->next != NULL )
            {
                MBEDTLS_SSL_DEBUG_MSG( 2, ( "free extra certs" ) );
