@@ -1090,6 +1090,9 @@ struct mbedtls_ssl_context
     unsigned char *in_msg;      /*!< message contents (in_iv+ivlen)   */
     unsigned char *in_offt;     /*!< read offset in application data  */
 
+    unsigned char *in_hs1hdr;   /*!< fragmented handshake 1st header  */
+    size_t in_hsfraglen;        /*!< total length of handshake fragments buffered so far */
+
     int in_msgtype;             /*!< record header: message type      */
     size_t in_msglen;           /*!< record header: message length    */
     size_t in_left;             /*!< amount of data read so far       */

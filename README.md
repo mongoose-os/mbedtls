@@ -1,6 +1,24 @@
 README for Mbed TLS
 ===================
 
+NB: Cesanta patches
+-------------------------
+
+ * Dynamic input and output buffers, lower memory usage
+ * Handshake defragmentation in stream mode, making max frag size extension actually work
+ * ATECCx08 chip support
+
+ See commit log for details.
+
+Development is easiest to do on x86_64, with ASAN enabled.
+
+Useful test commands for client testing:
+```
+$ make -C library -j4 ASAN=1 && make -C programs -j4 ssl/ssl_client2 ASAN=1 && \
+    programs/ssl/ssl_client2 server_addr=rojer.me server_port=443 request_page=/fw.zip debug_level=4 auth_mode=none server_name=rojer.me crt_file=none
+```
+
+
 Configuration
 -------------
 
