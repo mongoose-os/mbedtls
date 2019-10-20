@@ -1090,6 +1090,8 @@ struct mbedtls_ssl_context
     unsigned char *in_msg;      /*!< message contents (in_iv+ivlen)   */
     unsigned char *in_offt;     /*!< read offset in application data  */
 
+    unsigned char *in_hshdr;    /*!< original handshake header start  */
+
     int in_msgtype;             /*!< record header: message type      */
     size_t in_msglen;           /*!< record header: message length    */
     size_t in_left;             /*!< amount of data read so far       */
@@ -1105,6 +1107,7 @@ struct mbedtls_ssl_context
 
     size_t in_hslen;            /*!< current handshake message length,
                                      including the handshake header   */
+    size_t in_hsfraglen;        /*!< accumulated hs fragments length  */
     int nb_zero;                /*!< # of 0-length encrypted messages */
 
     int keep_current_message;   /*!< drop or reuse current message
