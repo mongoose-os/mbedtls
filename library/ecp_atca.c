@@ -30,7 +30,21 @@
  * Instead, we generate new keys with about 1.6% probability. With 1 slot that's
  * 8 years, which should be plenty.
  */
-#define SHOULD_REGEN(rnd) (((rnd) >> 2) == 42);
+#define SHOULD_REGEN(rnd) (((rnd) >> 2) == 42)
+
+static uint8_t s_tempkey_is_busy = 0;
+
+int ecp_atca_try_claim_tempkey(void)
+{
+    if ( s_tempkey_is_busy ) return 0;
+    s_tempkey_is_busy = 1;
+    return 1;
+}
+
+void ecp_atca_release_tempkey(void)
+{
+    s_tempkey_is_busy = 0;
+}
 
 /* NB: ATECC508 only supports P256 curve. */
 static size_t eckey_atca_get_bitlen( const void *ctx ) {
@@ -165,78 +179,122 @@ int ecdsa_atca_verify(mbedtls_ecdsa_context *ctx,
   return (verified ? 0 : MBEDTLS_ERR_ECP_VERIFY_FAILED);
 }
 
-static int get_ecdh_slot(uint8_t available_slots, uint8_t rnd) {
-  int slot, t, num_av_slots, step;
-  for (num_av_slots = 0, t = available_slots; t != 0; t >>= 1) {
-    if (t & 1) num_av_slots++;
-  }
-  step = 256 / num_av_slots;
-  for (t = 0, slot = 0; available_slots != 0; ) {
-    if (available_slots & 1) {
-      t += step;
-      if (t > rnd) break;
+static int get_ecdh_slot(uint8_t available_slots, uint8_t rnd)
+{
+    int slot, t, num_av_slots, step;
+    for (num_av_slots = 0, t = available_slots; t != 0; t >>= 1)
+    {
+        if (t & 1) num_av_slots++;
     }
-    if ((available_slots >>= 1) != 0) slot++;
-  }
-  return slot;
+    if ( num_av_slots == 0 ) return MBEDTLS_ECP_ATCA_SLOT_INVALID;
+    step = 256 / num_av_slots;
+    for ( t = 0, slot = 0; available_slots != 0; )
+    {
+        if ( available_slots & 1 )
+        {
+            t += step;
+            if (t > rnd) break;
+        }
+        if ( ( available_slots >>= 1 ) != 0 ) slot++;
+    }
+    return slot;
+}
+
+static int ecp_atca_ecdh_gen_keypair_slot( mbedtls_ecp_point *Q, uint8_t slot, int rnd )
+{
+    int ret;
+    ATCA_STATUS status;
+    uint8_t raw_pubkey[ATCA_PUB_KEY_SIZE];
+    int gen = ( slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY ? 1 : SHOULD_REGEN(rnd) );
+    do
+    {
+        uint16_t real_slot = ( slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY ? 0xffff : slot );
+        status = ( gen ? atcab_genkey( real_slot, raw_pubkey ) :
+                         atcab_get_pubkey( real_slot, raw_pubkey ) );
+        if (status != ATCA_SUCCESS)
+        {
+            fprintf( stderr, "ATCA:%d failed to %s ECDH pubkey: 0x%02x\n",
+                     slot, (gen ? "gen" : "get"), status );
+            if ( !gen && status == ATCA_EXECUTION_ERROR )
+            {
+                /* It may be that this slot has never had a key generated. Try it. */
+                gen = 1;
+            }
+            else
+            {
+                return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
+            }
+        }
+    } while ( status != ATCA_SUCCESS );
+    MBEDTLS_MPI_CHK(mbedtls_mpi_read_binary(&Q->X, raw_pubkey, ATCA_PUB_KEY_SIZE / 2));
+    MBEDTLS_MPI_CHK(mbedtls_mpi_read_binary(&Q->Y, raw_pubkey + ATCA_PUB_KEY_SIZE / 2, ATCA_PUB_KEY_SIZE / 2));
+    MBEDTLS_MPI_CHK(mbedtls_mpi_lset(&Q->Z, 1));
+    fprintf(stderr, "ATCA:%d ECDH %s pubkey ok\n", slot, (gen ? "gen" : "get"));
+    return 0;
+
+cleanup:
+  (void) ret;
+  return -1;
 }
 
 int ecp_atca_ecdh_gen_keypair(mbedtls_ecp_point *Q, uint8_t *slot,
                               int (*f_rng)(void *, unsigned char *, size_t),
-                              void *p_rng) {
-  int ret, gen;
-  ATCA_STATUS status;
-  int available_slots = mbedtls_atca_get_ecdh_slots_mask();
-  uint8_t rnd, raw_pubkey[ATCA_PUB_KEY_SIZE];
-  if (!mbedtls_atca_is_available() || available_slots == 0) {
-    return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
-  }
-  if (f_rng(p_rng, &rnd, sizeof(rnd)) != 0) {
-    return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
-  }
-  gen = SHOULD_REGEN(rnd);
-  *slot = get_ecdh_slot(available_slots, rnd);
-  do {
-    status = (gen ? atcab_genkey(*slot, raw_pubkey) :
-                    atcab_get_pubkey(*slot, raw_pubkey));
-    if (status != ATCA_SUCCESS) {
-      fprintf(stderr, "ATCA:%d failed to %s ECDH pubkey: 0x%02x\n",
-              *slot, (gen ? "gen" : "get"), status);
-      if (!gen && status == ATCA_EXECUTION_ERROR) {
-        /* It may be that this slot has never had a key generated. Try it. */
-        gen = 1;
-      } else {
+                              void *p_rng)
+{
+    int ret;
+    int rnd = 0;
+    if (!mbedtls_atca_is_available() )
+    {
         return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
-      }
     }
-  } while (status != ATCA_SUCCESS);
-  MBEDTLS_MPI_CHK(mbedtls_mpi_read_binary(&Q->X, raw_pubkey, ATCA_PUB_KEY_SIZE / 2));
-  MBEDTLS_MPI_CHK(mbedtls_mpi_read_binary(&Q->Y, raw_pubkey + ATCA_PUB_KEY_SIZE / 2, ATCA_PUB_KEY_SIZE / 2));
-  MBEDTLS_MPI_CHK(mbedtls_mpi_lset(&Q->Z, 1));
-  fprintf(stderr, "ATCA:%d ECDH %s pubkey ok\n", *slot, (gen ? "gen" : "get"));
-  return 0;
-
-cleanup:
-  (void) ret;
-  return -1;
+    /* Try tempkey if possible and available (not used by other connection). */
+    if ( mbedtls_atca_is_608() && ecp_atca_try_claim_tempkey() )
+    {
+        ret = ecp_atca_ecdh_gen_keypair_slot( Q, MBEDTLS_ECP_ATCA_SLOT_TEMPKEY, 0 );
+        if ( ret == 0 )
+        {
+            *slot = MBEDTLS_ECP_ATCA_SLOT_TEMPKEY;
+            return ( 0 );
+        }
+        ecp_atca_release_tempkey();
+    }
+    /* Fall back to using persistent slots. */
+    if ( f_rng(p_rng, (uint8_t *) &rnd, sizeof(rnd)) != 0 )
+    {
+        return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
+    }
+    *slot = get_ecdh_slot(mbedtls_atca_get_ecdh_slots_mask(), rnd);
+    if ( *slot == MBEDTLS_ECP_ATCA_SLOT_INVALID )
+    {
+        return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
+    }
+    return ecp_atca_ecdh_gen_keypair_slot( Q, *slot, rnd );
 }
 
-int ecp_atca_ecdh_compute_pms(uint8_t slot, mbedtls_ecp_point *Qp, mbedtls_mpi *z) {
-  int ret;
-  ATCA_STATUS status;
-  uint8_t raw_pubkey[ATCA_PUB_KEY_SIZE], pms[ATCA_KEY_SIZE];
-  MBEDTLS_MPI_CHK(mbedtls_mpi_write_binary(&Qp->X, raw_pubkey, ATCA_PUB_KEY_SIZE / 2));
-  MBEDTLS_MPI_CHK(mbedtls_mpi_write_binary(&Qp->Y, raw_pubkey + ATCA_PUB_KEY_SIZE / 2, ATCA_PUB_KEY_SIZE / 2));
-  if ((status = atcab_ecdh(slot, raw_pubkey, pms)) != ATCA_SUCCESS) {
-    fprintf(stderr, "ATCA:%d ECDH failed: 0x%02x\n", slot, status);
-    return -1;
-  }
-  MBEDTLS_MPI_CHK(mbedtls_mpi_read_binary(z, pms, ATCA_KEY_SIZE));
-  fprintf(stderr, "ATCA:%d ECDH ok\n", slot);
-  return 0;
+int ecp_atca_ecdh_compute_pms(uint8_t slot, mbedtls_ecp_point *Qp, mbedtls_mpi *z)
+{
+    int ret;
+    uint8_t mode;
+    ATCA_STATUS status;
+    uint8_t raw_pubkey[ATCA_PUB_KEY_SIZE], pms[ATCA_KEY_SIZE];
+    MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &Qp->X, raw_pubkey, ATCA_PUB_KEY_SIZE / 2 ) );
+    MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &Qp->Y, raw_pubkey + ATCA_PUB_KEY_SIZE / 2, ATCA_PUB_KEY_SIZE / 2 ) );
+    mode = ECDH_MODE_COPY_OUTPUT_BUFFER | ECDH_MODE_OUTPUT_CLEAR;
+    if ( slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY )
+    {
+        mode |= ECDH_MODE_SOURCE_TEMPKEY;
+    }
+    if ( ( status = atcab_ecdh_base( mode, slot, raw_pubkey, pms, NULL ) ) != ATCA_SUCCESS )
+    {
+        fprintf( stderr, "ATCA:%d ECDH failed: 0x%02x\n", slot, status );
+        return -1;
+    }
+    MBEDTLS_MPI_CHK( mbedtls_mpi_read_binary( z, pms, ATCA_KEY_SIZE ) );
+    fprintf( stderr, "ATCA:%d ECDH ok\n", slot );
+    return 0;
 cleanup:
-  (void) ret;
-  return -1;
+    (void) ret;
+    return -1;
 }
 
 #endif /* MBEDTLS_ECP_ATCA */

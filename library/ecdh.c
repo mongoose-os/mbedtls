@@ -101,7 +101,6 @@ static int ecdh_gen_public_restartable_atca( mbedtls_ecdh_context *ctx,
     if( ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 &&
         ecp_atca_ecdh_gen_keypair( &ctx->Q, &slot, f_rng, p_rng ) == 0)
     {
-        ctx->use_atca = 1;
         ctx->atca_slot = slot;
         return( 0 );
     }
@@ -167,9 +166,16 @@ static int ecdh_compute_shared_restartable_atca( mbedtls_ecdh_context *ctx,
 {
 
 #if defined(MBEDTLS_ECP_ATCA)
-    if ( ctx->use_atca && ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 )
+    if ( ctx->grp.id == MBEDTLS_ECP_DP_SECP256R1 &&
+         ctx->atca_slot != MBEDTLS_ECP_ATCA_SLOT_INVALID )
     {
-        return( ecp_atca_ecdh_compute_pms(ctx->atca_slot, &ctx->Qp, &ctx->z ) );
+        int ret = ecp_atca_ecdh_compute_pms( ctx->atca_slot, &ctx->Qp, &ctx->z );
+        if ( ctx->atca_slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY )
+        {
+            ecp_atca_release_tempkey();
+        }
+        ctx->atca_slot = MBEDTLS_ECP_ATCA_SLOT_INVALID;
+        return( ret );
     }
 #endif
 
@@ -204,6 +210,9 @@ static void ecdh_init_internal( mbedtls_ecdh_context_mbed *ctx )
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
     mbedtls_ecp_restart_init( &ctx->rs );
+#endif
+#ifdef MBEDTLS_ECP_ATCA
+    ctx->atca_slot = MBEDTLS_ECP_ATCA_SLOT_INVALID;
 #endif
 }
 
@@ -276,6 +285,12 @@ static void ecdh_free_internal( mbedtls_ecdh_context_mbed *ctx )
 
 #if defined(MBEDTLS_ECP_RESTARTABLE)
     mbedtls_ecp_restart_free( &ctx->rs );
+#endif
+#ifdef MBEDTLS_ECP_ATCA
+    if ( ctx->atca_slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY )
+    {
+        ecp_atca_release_tempkey();
+    }
 #endif
 }
 
@@ -498,7 +513,6 @@ int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx,
         mbedtls_ecp_group_id grp_id = MBEDTLS_ECP_DP_SECP256R1;  // TODO
         if ( ( ret = mbedtls_ecp_group_load(&ctx->grp, grp_id) ) != 0 )
             return( ret );
-        ctx->use_atca = 1;
         ctx->atca_slot = 0;  // TODO
         return 0;
     }
