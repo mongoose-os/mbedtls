@@ -186,7 +186,7 @@ static int get_ecdh_slot(uint8_t available_slots, uint8_t rnd)
     {
         if (t & 1) num_av_slots++;
     }
-    if ( num_av_slots == 0 ) return MBEDTLS_ECP_ATCA_SLOT_INVALID;
+    if ( num_av_slots == 0 ) return MBEDTLS_ATCA_SLOT_INVALID;
     step = 256 / num_av_slots;
     for ( t = 0, slot = 0; available_slots != 0; )
     {
@@ -205,10 +205,10 @@ static int ecp_atca_ecdh_gen_keypair_slot( mbedtls_ecp_point *Q, uint8_t slot, i
     int ret;
     ATCA_STATUS status;
     uint8_t raw_pubkey[ATCA_PUB_KEY_SIZE];
-    int gen = ( slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY ? 1 : SHOULD_REGEN(rnd) );
+    int gen = ( slot == MBEDTLS_ATCA_SLOT_TEMPKEY ? 1 : SHOULD_REGEN(rnd) );
     do
     {
-        uint16_t real_slot = ( slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY ? 0xffff : slot );
+        uint16_t real_slot = ( slot == MBEDTLS_ATCA_SLOT_TEMPKEY ? 0xffff : slot );
         status = ( gen ? atcab_genkey( real_slot, raw_pubkey ) :
                          atcab_get_pubkey( real_slot, raw_pubkey ) );
         if (status != ATCA_SUCCESS)
@@ -250,10 +250,10 @@ int ecp_atca_ecdh_gen_keypair(mbedtls_ecp_point *Q, uint8_t *slot,
     /* Try tempkey if possible and available (not used by other connection). */
     if ( mbedtls_atca_is_608() && ecp_atca_try_claim_tempkey() )
     {
-        ret = ecp_atca_ecdh_gen_keypair_slot( Q, MBEDTLS_ECP_ATCA_SLOT_TEMPKEY, 0 );
+        ret = ecp_atca_ecdh_gen_keypair_slot( Q, MBEDTLS_ATCA_SLOT_TEMPKEY, 0 );
         if ( ret == 0 )
         {
-            *slot = MBEDTLS_ECP_ATCA_SLOT_TEMPKEY;
+            *slot = MBEDTLS_ATCA_SLOT_TEMPKEY;
             return ( 0 );
         }
         ecp_atca_release_tempkey();
@@ -264,7 +264,7 @@ int ecp_atca_ecdh_gen_keypair(mbedtls_ecp_point *Q, uint8_t *slot,
         return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
     }
     *slot = get_ecdh_slot(mbedtls_atca_get_ecdh_slots_mask(), rnd);
-    if ( *slot == MBEDTLS_ECP_ATCA_SLOT_INVALID )
+    if ( *slot == MBEDTLS_ATCA_SLOT_INVALID )
     {
         return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
     }
@@ -280,7 +280,7 @@ int ecp_atca_ecdh_compute_pms(uint8_t slot, mbedtls_ecp_point *Qp, mbedtls_mpi *
     MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &Qp->X, raw_pubkey, ATCA_PUB_KEY_SIZE / 2 ) );
     MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &Qp->Y, raw_pubkey + ATCA_PUB_KEY_SIZE / 2, ATCA_PUB_KEY_SIZE / 2 ) );
     mode = ECDH_MODE_COPY_OUTPUT_BUFFER | ECDH_MODE_OUTPUT_CLEAR;
-    if ( slot == MBEDTLS_ECP_ATCA_SLOT_TEMPKEY )
+    if ( slot == MBEDTLS_ATCA_SLOT_TEMPKEY )
     {
         mode |= ECDH_MODE_SOURCE_TEMPKEY;
     }

@@ -166,7 +166,7 @@ int mbedtls_pk_parse_keyfile( mbedtls_pk_context *ctx,
 
 #ifdef MBEDTLS_ECP_ATCA
     if( path != NULL &&
-        strstr(path, MBEDTLS_ECP_ATCA_KEY_FILE_NAME_PREFIX) == path )
+        strstr(path, MBEDTLS_ATCA_KEY_FILE_NAME_PREFIX) == path )
     {
         int slot = atoi(path + 5);
         if( mbedtls_atca_get_ecdh_slots_mask() & (1 << slot) )

@@ -2144,6 +2144,10 @@ static const mbedtls_cipher_info_t null_cipher_info = {
 };
 #endif /* defined(MBEDTLS_CIPHER_NULL_CIPHER) */
 
+#if defined(MBEDTLS_AES_ATCA)
+extern const mbedtls_cipher_info_t atca_aes_128_ecb_info;
+#endif
+
 const mbedtls_cipher_definition_t mbedtls_cipher_definitions[] =
 {
 #if defined(MBEDTLS_AES_C)
@@ -2287,6 +2291,10 @@ const mbedtls_cipher_definition_t mbedtls_cipher_definitions[] =
 #if defined(MBEDTLS_CIPHER_NULL_CIPHER)
     { MBEDTLS_CIPHER_NULL,                 &null_cipher_info },
 #endif /* MBEDTLS_CIPHER_NULL_CIPHER */
+
+#if defined(MBEDTLS_AES_ATCA)
+    { MBEDTLS_CIPHER_AES_128_ECB_ATCA,     &atca_aes_128_ecb_info },
+#endif
 
     { MBEDTLS_CIPHER_NONE, NULL }
 };
