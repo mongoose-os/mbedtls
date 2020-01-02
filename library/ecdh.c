@@ -497,28 +497,15 @@ static int ecdh_get_params_internal( mbedtls_ecdh_context_mbed *ctx,
  * Get parameters from a keypair
  */
 int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx,
-                             mbedtls_pk_context *pk,
+                             const mbedtls_ecp_keypair *key,
                              mbedtls_ecdh_side side )
 {
     int ret;
-    const mbedtls_ecp_keypair *key;
+
     ECDH_VALIDATE_RET( ctx != NULL );
-    ECDH_VALIDATE_RET( pk != NULL );
+    ECDH_VALIDATE_RET( key != NULL );
     ECDH_VALIDATE_RET( side == MBEDTLS_ECDH_OURS ||
                        side == MBEDTLS_ECDH_THEIRS );
-
-#ifdef MBEDTLS_ECP_ATCA
-    if ( side == MBEDTLS_ECDH_OURS &&
-         strcmp(pk->pk_info->name, MBEDTLS_ECP_ATCA_KEY_NAME) == 0 ) {
-        mbedtls_ecp_group_id grp_id = MBEDTLS_ECP_DP_SECP256R1;  // TODO
-        if ( ( ret = mbedtls_ecp_group_load(&ctx->grp, grp_id) ) != 0 )
-            return( ret );
-        ctx->atca_slot = 0;  // TODO
-        return 0;
-    }
-#endif
-
-    key = mbedtls_pk_ec( *pk );
 
     if( mbedtls_ecdh_grp_id( ctx ) == MBEDTLS_ECP_DP_NONE )
     {
@@ -548,6 +535,33 @@ int mbedtls_ecdh_get_params( mbedtls_ecdh_context *ctx,
             return MBEDTLS_ERR_ECP_BAD_INPUT_DATA;
     }
 #endif
+}
+
+int mbedtls_ecdh_get_params_pk( mbedtls_ecdh_context *ctx,
+                                const mbedtls_pk_context *pk,
+                                mbedtls_ecdh_side side )
+{
+    int ret = 0;
+
+    ECDH_VALIDATE_RET( ctx != NULL );
+    ECDH_VALIDATE_RET( pk != NULL );
+    ECDH_VALIDATE_RET( side == MBEDTLS_ECDH_OURS ||
+                       side == MBEDTLS_ECDH_THEIRS );
+
+#ifdef MBEDTLS_ECP_ATCA
+    if ( side == MBEDTLS_ECDH_OURS &&
+         strcmp(pk->pk_info->name, MBEDTLS_ECP_ATCA_KEY_NAME) == 0 ) {
+        mbedtls_ecp_group_id grp_id = MBEDTLS_ECP_DP_SECP256R1;  // TODO
+        if ( ( ret = mbedtls_ecp_group_load(&ctx->grp, grp_id) ) != 0 )
+            return( ret );
+        ctx->atca_slot = 0;  // TODO
+        return 0;
+    }
+#else
+    (void) ret;
+#endif
+
+    return mbedtls_ecdh_get_params( ctx, mbedtls_pk_ec( *pk ), side );
 }
 
 static int ecdh_make_public_internal( mbedtls_ecdh_context_mbed *ctx,
