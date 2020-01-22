@@ -118,6 +118,7 @@ void mbedtls_mpi_init( mbedtls_mpi *X )
     X->s = 1;
     X->n = 0;
     X->p = NULL;
+    X->inline_buf_size = 0;
 }
 
 /*
@@ -131,12 +132,14 @@ void mbedtls_mpi_free( mbedtls_mpi *X )
     if( X->p != NULL )
     {
         mbedtls_mpi_zeroize( X->p, X->n );
-        mbedtls_free( X->p );
+        if( X->p != X->inline_buf )
+            mbedtls_free( X->p );
     }
 
     X->s = 1;
     X->n = 0;
     X->p = NULL;
+    /* Do not reset inline_buf_size! */
 }
 
 /*
@@ -152,14 +155,26 @@ int mbedtls_mpi_grow( mbedtls_mpi *X, size_t nblimbs )
 
     if( X->n < nblimbs )
     {
+        if( nblimbs <= X->inline_buf_size )
+        {
+            X->p = X->inline_buf;
+            for( size_t i = X->n; i < nblimbs; i++ )
+                X->p[i] = 0;
+            X->n = nblimbs;
+            return ( 0 );
+        }
         if( ( p = (mbedtls_mpi_uint*)mbedtls_calloc( nblimbs, ciL ) ) == NULL )
             return( MBEDTLS_ERR_MPI_ALLOC_FAILED );
 
         if( X->p != NULL )
         {
-            memcpy( p, X->p, X->n * ciL );
-            mbedtls_mpi_zeroize( X->p, X->n );
-            mbedtls_free( X->p );
+            if( p != X->p )
+            {
+                memcpy( p, X->p, X->n * ciL );
+                mbedtls_mpi_zeroize( X->p, X->n );
+            }
+            if( X->p != X->inline_buf )
+                mbedtls_free( X->p );
         }
 
         X->n = nblimbs;
@@ -195,14 +210,25 @@ int mbedtls_mpi_shrink( mbedtls_mpi *X, size_t nblimbs )
     if( i < nblimbs )
         i = nblimbs;
 
-    if( ( p = (mbedtls_mpi_uint*)mbedtls_calloc( i, ciL ) ) == NULL )
-        return( MBEDTLS_ERR_MPI_ALLOC_FAILED );
+    if( i <= X->inline_buf_size )
+    {
+        p = X->inline_buf;
+    }
+    else
+    {
+        if( ( p = (mbedtls_mpi_uint*)mbedtls_calloc( i, ciL ) ) == NULL )
+            return( MBEDTLS_ERR_MPI_ALLOC_FAILED );
+    }
 
     if( X->p != NULL )
     {
-        memcpy( p, X->p, i * ciL );
-        mbedtls_mpi_zeroize( X->p, X->n );
-        mbedtls_free( X->p );
+        if( p != X->p )
+        {
+            memcpy( p, X->p, i * ciL );
+            mbedtls_mpi_zeroize( X->p, X->n );
+        }
+        if( X->p != X->inline_buf )
+            mbedtls_free( X->p );
     }
 
     X->n = i;
@@ -216,6 +242,7 @@ int mbedtls_mpi_shrink( mbedtls_mpi *X, size_t nblimbs )
  */
 int mbedtls_mpi_copy( mbedtls_mpi *X, const mbedtls_mpi *Y )
 {
+    /* NB: Do not copy inline_buf_size! */
     int ret = 0;
     size_t i;
     MPI_VALIDATE_RET( X != NULL );
@@ -258,13 +285,14 @@ cleanup:
  */
 void mbedtls_mpi_swap( mbedtls_mpi *X, mbedtls_mpi *Y )
 {
-    mbedtls_mpi T;
+    mbedtls_mpi_inline T;
     MPI_VALIDATE( X != NULL );
     MPI_VALIDATE( Y != NULL );
-
-    memcpy( &T,  X, sizeof( mbedtls_mpi ) );
-    memcpy(  X,  Y, sizeof( mbedtls_mpi ) );
-    memcpy(  Y, &T, sizeof( mbedtls_mpi ) );
+    mbedtls_mpi_init_inline( &T );
+    mbedtls_mpi_copy( &T.N, X  );
+    mbedtls_mpi_copy(  X, Y  );
+    mbedtls_mpi_copy(  Y, &T.N );
+    mbedtls_mpi_free( &T.N );
 }
 
 /**
@@ -1465,7 +1493,7 @@ static mbedtls_mpi_uint mpi_sub_hlp( size_t n,
  */
 int mbedtls_mpi_sub_abs( mbedtls_mpi *X, const mbedtls_mpi *A, const mbedtls_mpi *B )
 {
-    mbedtls_mpi TB;
+    mbedtls_mpi_inline TB;
     int ret;
     size_t n;
     mbedtls_mpi_uint carry;
@@ -1473,12 +1501,12 @@ int mbedtls_mpi_sub_abs( mbedtls_mpi *X, const mbedtls_mpi *A, const mbedtls_mpi
     MPI_VALIDATE_RET( A != NULL );
     MPI_VALIDATE_RET( B != NULL );
 
-    mbedtls_mpi_init( &TB );
+    mbedtls_mpi_init_inline( &TB );
 
     if( X == B )
     {
-        MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &TB, B ) );
-        B = &TB;
+        MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &TB.N, B ) );
+        B = &TB.N;
     }
 
     if( X != A )
@@ -1519,7 +1547,7 @@ int mbedtls_mpi_sub_abs( mbedtls_mpi *X, const mbedtls_mpi *A, const mbedtls_mpi
 
 cleanup:
 
-    mbedtls_mpi_free( &TB );
+    mbedtls_mpi_free( &TB.N );
 
     return( ret );
 }
@@ -1710,16 +1738,16 @@ int mbedtls_mpi_mul_mpi( mbedtls_mpi *X, const mbedtls_mpi *A, const mbedtls_mpi
 {
     int ret;
     size_t i, j;
-    mbedtls_mpi TA, TB;
+    mbedtls_mpi_inline TA, TB;
     int result_is_zero = 0;
     MPI_VALIDATE_RET( X != NULL );
     MPI_VALIDATE_RET( A != NULL );
     MPI_VALIDATE_RET( B != NULL );
 
-    mbedtls_mpi_init( &TA ); mbedtls_mpi_init( &TB );
+    mbedtls_mpi_init_inline( &TA ); mbedtls_mpi_init_inline( &TB );
 
-    if( X == A ) { MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &TA, A ) ); A = &TA; }
-    if( X == B ) { MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &TB, B ) ); B = &TB; }
+    if( X == A ) { MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &TA.N, A ) ); A = &TA.N; }
+    if( X == B ) { MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &TB.N, B ) ); B = &TB.N; }
 
     for( i = A->n; i > 0; i-- )
         if( A->p[i - 1] != 0 )
@@ -1750,7 +1778,7 @@ int mbedtls_mpi_mul_mpi( mbedtls_mpi *X, const mbedtls_mpi *A, const mbedtls_mpi
 
 cleanup:
 
-    mbedtls_mpi_free( &TB ); mbedtls_mpi_free( &TA );
+    mbedtls_mpi_free( &TB.N ); mbedtls_mpi_free( &TA.N );
 
     return( ret );
 }
