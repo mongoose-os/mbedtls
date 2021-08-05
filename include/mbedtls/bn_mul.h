@@ -929,6 +929,112 @@
 #endif /* SSE2 */
 #endif /* MSVC */
 
+#if defined(__xtensa__)
+/*
+ * Xtensa ISA provides two instructions that can be used to speed things up:
+ *  - muluh, if available, can be used to obtain the upper 32 bits of the result.
+ *    This provides approx. 2x speedup vs generic.
+ *  - mul16u is a bit faster than mull.
+ *    Generic 16 bit algorithm that uses it is ~12% faster.
+ */
+
+#include "xtensa/config/core-isa.h"
+
+#define BNLIT(a) #a
+#define BNSS(a) BNLIT(a)
+
+#if XCHAL_HAVE_MUL32_HIGH
+
+/* 32x32 multiplication using mull and muluh. */
+
+#define MULADDC_INIT                         \
+    asm (
+
+#define MULADDC_CORE1(n)                     \
+      "    l32i     a5,    %[s],  0     \n"  /* a5 = *s++ */ \
+      "    addi     %[s],  %[s],  4     \n"  \
+      "    mull     a6,    a5,    %[b]  \n"  /* a6 = lower 32 bits */  \
+      "    muluh    a7,    a5,    %[b]  \n"  /* a7 = upper 32 bits, becomes new carry */  \
+      "    add      a6,    a6,    %[ci] \n"  /* add carry-in, handle overflow */  \
+      "    bgeu     a6,    %[ci], l1_%=_" BNSS(n) "  \n"    \
+      "    addi     a7,    a7,    1     \n"  \
+      "l1_%=_" BNSS(n) ": \n"                \
+      "    l32i     a5,    %[di], 0     \n"  /* add *d, handle overflow */  \
+      "    add      a6,    a6,    a5    \n"  \
+      "    bgeu     a6,    a5,    l2_%=_" BNSS(n) "  \n"  \
+      "    addi     a7,    a7,    1     \n"  \
+      "l2_%=_" BNSS(n) ": \n"                \
+      "    s32i     a6,    %[di], 0     \n"  /* store result */  \
+      "    addi     %[di], %[di], 4     \n"  /* d++ */  \
+      "    mov      %[ci], a7           \n"
+
+#define MULADDC_CORE MULADDC_CORE1(__COUNTER__)
+
+#define MULADDC_STOP                         \
+      "    mov      %[dO], %[di]        \n"  \
+      "    mov      %[co], %[ci]        \n"  \
+      : [co] "=a" (c),  [dO] "=a" (d)        \
+      : [s] "a" (s), [b] "a" (b), [ci] "a" (c), [di] "a" (d)  \
+      : "a5", "a6", "a7"                     \
+    );
+
+#elif XCHAL_HAVE_MUL16
+
+/* Implementation of the generic algorithm using mul16u. */
+
+#define MULADDC_INIT                         \
+    asm ( \
+      "    mov      a4,   %[b]       \n"     \
+      "    extui    a5,   %[b],  16, 16 \n"  /* a5 = b1, a4 = b0 */  \
+
+#define MULADDC_CORE1(n)                     \
+      "    l32i     a6,   %[s],  0      \n"  /* a6 = *s++ */ \
+      "    addi     %[s], %[s],  4      \n"  \
+      "    srli     a7,   a6,   16      \n"  /* a7 = s1 */  \
+      "    mul16u   a8,   a6,   a5      \n"  /* a8: rx = s0 * b1 */  \
+      "    mul16u   a9,   a6,   a4      \n"  /* a9: r0 = s0 * b0 */  \
+      "    mul16u   a10,  a7,   a4      \n"  /* a10: ry = s1 * b0 */  \
+      "    mul16u   a11,  a7,   a5      \n"  /* a11: r1 = s1 * b1 */  \
+      "    extui    a6,   a8,   16, 16  \n"  /* a6 = rx >> biH */  \
+      "    add      a11, a11,   a6      \n"  /* r1 += rx >> biH */  \
+      "    extui    a6,  a10,   16, 16  \n"  /* a6 = ry >> biH */  \
+      "    add      a11, a11,   a6      \n"  /* r1 += ry >> biH */  \
+      "    slli     a8,   a8,   16      \n"  /* rx <<= biH */  \
+      "    slli     a10, a10,   16      \n"  /* ry <<= biH */  \
+      "    add      a9,   a9,   a8      \n"  /* r0 += rx */  \
+      "    bgeu     a9,   a8,   l1_%=_" BNSS(n) "\n" /* if (r0 < rx) r1++ */  \
+      "    addi     a11, a11,   1       \n"  \
+      "l1_%=_" BNSS(n) ": \n"  \
+      "    add      a9,   a9,   a10     \n"  /* r0 += ry */  \
+      "    bgeu     a9,  a10,   l2_%=_" BNSS(n) "\n" /* if (r0 < ry) r1++ */  \
+      "    addi     a11, a11,   1       \n"  \
+      "l2_%=_" BNSS(n) ": \n"  \
+      "    add      a9,  a9,    %[ci]   \n"     /* r0 += c */  \
+      "    bgeu     a9,  %[ci], l3_%=_" BNSS(n) "\n" /* if (r0 < c) r1++ */  \
+      "    addi     a11, a11,   1       \n"  \
+      "l3_%=_" BNSS(n) ": \n"  \
+      "    l32i     a6,  %[di], 0       \n"     /* r0 += *d */  \
+      "    add      a9,  a9,    a6      \n"  \
+      "    bgeu     a9,  a6,    l4_%=_" BNSS(n) "\n" /* if (r0 < *d) r1++ */ \
+      "    addi     a11, a11,   1       \n"  \
+      "l4_%=_" BNSS(n) ": \n"  \
+      "    mov      %[ci], a11          \n"  \
+      "    s32i     a9,  %[di], 0       \n"  /* *d = r0 */  \
+      "    addi     %[di], %[di], 4     \n"  /* d++ */
+
+#define MULADDC_CORE MULADDC_CORE1(__COUNTER__)
+
+#define MULADDC_STOP                         \
+      "    mov      %[doo], %[di]       \n"  \
+      "    mov      %[co], %[ci]        \n"  /* c = r1 */  \
+      : [co] "=a" (c),  [doo] "=a" (d) \
+      : [s] "a" (s), [b] "a" (b), [ci] "a" (c), [di] "a" (d)  \
+      : "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11"  \
+    );
+#endif /* XCHAL_HAVE_MUL32_HIGH */
+
+#endif /* Xtensa */
+
 #endif /* MBEDTLS_HAVE_ASM */
 
 #if !defined(MULADDC_CORE)
