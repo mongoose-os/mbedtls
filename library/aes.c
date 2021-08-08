@@ -115,6 +115,8 @@
 static int aes_padlock_ace = -1;
 #endif
 
+#if !(defined(MBEDTLS_AES_ENCRYPT_ALT) && defined(MBEDTLS_AES_DECRYPT_ALT))
+
 #if defined(MBEDTLS_AES_ROM_TABLES)
 /*
  * Forward S-box
@@ -539,6 +541,8 @@ static void aes_gen_tables( void )
 #define AES_FT3(idx) FT3[idx]
 
 #endif /* MBEDTLS_AES_FEWER_TABLES */
+
+#endif /* !(defined(MBEDTLS_AES_ENCRYPT_ALT) && defined(MBEDTLS_AES_DECRYPT_ALT)) */
 
 void mbedtls_aes_init( mbedtls_aes_context *ctx )
 {
