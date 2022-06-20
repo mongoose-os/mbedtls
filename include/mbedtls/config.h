@@ -3454,13 +3454,15 @@
 
 /* \} name SECTION: Customisation configuration options */
 
-/* Target and application specific configurations
+/**
+ * Target and application specific configurations
  *
- * Allow user to override any previous default.
- *
+ * Allow user to override any preceding default.
  */
 #if defined(MBEDTLS_USER_CONFIG_FILE)
-#include MBEDTLS_USER_CONFIG_FILE
+#define MBEDTLS_QUOTE_LIT(x) #x
+#define MBEDTLS_QUOTE(x) MBEDTLS_QUOTE_LIT(x)
+#include MBEDTLS_QUOTE(MBEDTLS_USER_CONFIG_FILE)
 #endif
 
 #include "mbedtls/check_config.h"
